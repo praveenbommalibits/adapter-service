@@ -61,7 +61,6 @@ class RestJsonProtocolHandlerTest {
         when(requestBodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(requestBodySpec);
         when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
         when(requestBodySpec.bodyValue(any())).thenReturn((RequestHeadersSpec) requestHeadersSpec);
-        //when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("{\"status\":\"ok\"}"));
 
@@ -87,7 +86,6 @@ class RestJsonProtocolHandlerTest {
         when(requestBodyUriSpec.uri(metadata.getEndpointUrl())).thenReturn(requestBodySpec);
         when(requestBodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(requestBodySpec);
         when(requestBodySpec.bodyValue(any())).thenReturn((RequestHeadersSpec) requestHeadersSpec);
-        //when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("{\"data\":\"value\"}"));
 
@@ -112,7 +110,6 @@ class RestJsonProtocolHandlerTest {
         when(requestBodyUriSpec.uri(metadata.getEndpointUrl())).thenReturn(requestBodySpec);
         when(requestBodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(requestBodySpec);
         when(requestBodySpec.bodyValue(any())).thenReturn((RequestHeadersSpec) requestHeadersSpec);
-        //when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.error(new RuntimeException("Remote error")));
 
