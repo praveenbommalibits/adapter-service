@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+adapter:
+  services:
+    payment_service:
+      endpointUrl: https://api.payment-provider.com/v1/payments
+      protocol: REST_JSON
+      httpMethod: POST
+      headers:
+        Authorization: "Bearer sampletoken"
+      requestTemplate: payment_request_template.json
+      responseTemplate: payment_response_template.json
+
+    customer_service:
+      endpointUrl: https://api.customer.com/v1/customers
+      protocol: REST_JSON
+      httpMethod: GET
+      headers:
+        X-API-Key: apikey123
+      requestTemplate: customer_request_template.json
+      responseTemplate: customer_response_template.json
+
+

@@ -1,0 +1,4 @@
+{
+  "transactionId": "$.paymentId",
+  "status": "$.status"
+}

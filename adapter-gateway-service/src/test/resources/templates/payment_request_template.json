@@ -1,0 +1,5 @@
+{
+  "amount": "${amount}",
+  "currency": "${currency}",
+  "customerId": "${customerId}"
+}
