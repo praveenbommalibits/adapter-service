@@ -33,7 +33,7 @@ class SoapProtocolHandlerTest {
 
 
     //TODO Socket connection HSM
-    //TODO SEMANTIC SERVER ERROR
+    //TODO SEMANTIC SERVER SCANNING
     @Test
     void testExecute_successResponse() throws Exception {
         ServiceMetadata metadata = buildTestServiceMetadata();
