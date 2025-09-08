@@ -31,6 +31,9 @@ class SoapProtocolHandlerTest {
         soapProtocolHandler = new SoapProtocolHandler(webServiceTemplate);
     }
 
+
+    //TODO Socket connection HSM
+    //TODO SEMANTIC SERVER ERROR
     @Test
     void testExecute_successResponse() throws Exception {
         ServiceMetadata metadata = buildTestServiceMetadata();
