@@ -15,6 +15,7 @@
             <option value="$PROJECT_DIR$/adapter-config-service" />
             <option value="$PROJECT_DIR$/adapter-gateway-service" />
             <option value="$PROJECT_DIR$/adapter-protocol-grpc" />
+            <option value="$PROJECT_DIR$/adapter-protocol-proxy" />
             <option value="$PROJECT_DIR$/adapter-protocol-rest" />
             <option value="$PROJECT_DIR$/adapter-protocol-soap" />
             <option value="$PROJECT_DIR$/adapter-security" />

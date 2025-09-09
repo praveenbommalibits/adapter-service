@@ -14,3 +14,4 @@ include(
 )
 
 include("adapter-protocol-soap")
+include("adapter-protocol-proxy")
