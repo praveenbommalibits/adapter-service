@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  checks: write  # ← allow writing check runs
+  contents: read  # ← default for source code
+
 jobs:
   test:
     runs-on: ubuntu-latest
