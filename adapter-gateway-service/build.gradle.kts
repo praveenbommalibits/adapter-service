@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":adapter-spi"))
     implementation(project(":adapter-protocol-rest"))
     implementation(project(":adapter-commons"))
+    implementation(project(":adapter-transform-core"))
 
     // Spring Boot WebFlux for reactive REST endpoints
     implementation("org.springframework.boot:spring-boot-starter-webflux")
@@ -32,11 +33,13 @@ dependencies {
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
 
-    // Testing dependencies
-    testImplementation("org.springframework.boot:spring-boot-starter-test") {
-        exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
-    }
-    testImplementation("io.projectreactor:reactor-test")
+    // Test dependencies
+    testImplementation(project(":adapter-client-starter"))
+    testImplementation(project(":adapter-transform-core"))
+
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("com.github.tomakehurst:wiremock-jre8-standalone:2.35.0")
+    testImplementation("javax.servlet:javax.servlet-api:4.0.1")
 }
 
 tasks.withType<Test> {

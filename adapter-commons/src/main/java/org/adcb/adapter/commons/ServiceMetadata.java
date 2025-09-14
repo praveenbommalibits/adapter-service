@@ -1,15 +1,24 @@
 package org.adcb.adapter.commons;
 
 import lombok.Data;
-
 import java.util.Map;
 
 @Data
 public class ServiceMetadata {
-    private String endpointUrl;
+    // Existing fields
+    private String serviceName;
     private String protocol;
+    private String requestTemplate;
+    private String responseTemplate;
+    private String endpointUrl;
     private String httpMethod;
     private Map<String, String> headers;
-    private String requestTemplate;  // Template file name
-    private String responseTemplate; // Template file name
+
+    // New fields for SOAP error extraction
+    private String errorCodeXPath;
+    private String errorDescriptionXPath;
+
+    // Runtime status fields (to be set by handlers/gateway)
+    private Integer lastHttpStatus;
+    private String lastErrorDescription;
 }

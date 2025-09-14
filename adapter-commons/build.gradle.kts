@@ -19,6 +19,10 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.15.2")
 
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("com.github.tomakehurst:wiremock-jre8:2.35.0")   // For mocking REST HTTP
+    testImplementation("org.springframework.ws:spring-ws-test")         // For mocking SOAP
+
 }
 
 tasks.jar {

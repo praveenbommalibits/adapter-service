@@ -18,6 +18,7 @@ dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.5"))
 
     implementation(project(":adapter-gateway-service"))
+    implementation(project(":adapter-transform-core"))
     implementation(project(":adapter-commons"))
     implementation(project(":adapter-spi"))
 

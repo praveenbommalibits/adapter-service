@@ -36,7 +36,7 @@ class ProxyPassProtocolHandlerTest {
     @Test
     void testExecute_returnsRawResponse() {
         ServiceMetadata metadata = new ServiceMetadata();
-        metadata.setEndpointUrl("http://localhost:9999/proxy");
+        metadata.setEndpointUrl("http://localhost:9999/audits");
         metadata.setHttpMethod("POST");
 
         when(webClient.method(HttpMethod.POST)).thenReturn(requestBodyUriSpec);

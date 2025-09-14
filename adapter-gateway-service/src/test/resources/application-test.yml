@@ -1,0 +1,10 @@
+adapter:
+  templates:
+    path: src/test/resources/templates
+  services:
+    customer_rest_service:       # existing block
+      protocol: REST_JSON
+      endpointUrl: http://localhost:8089/api/customers
+      httpMethod: POST
+      requestTemplate: customer_request.json
+      responseTemplate: customer_response.json

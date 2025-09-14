@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.adcb.adapter.spi.ProtocolHandler;
 import org.adcb.adapter.commons.ServiceMetadata;
 import org.springframework.http.HttpMethod;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.Map;
  * Protocol handler for direct HTTP proxy/pass-through (no request/response transformation).
  */
 @Slf4j
+@Component("PROXY_PASS")
 public class ProxyPassProtocolHandler implements ProtocolHandler {
 
     private final WebClient webClient;

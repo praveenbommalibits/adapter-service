@@ -8,14 +8,14 @@ import org.springframework.context.annotation.Configuration;
 import java.util.Map;
 
 @Configuration
-@ConfigurationProperties(prefix = "adapter.services")
+@ConfigurationProperties(prefix = "adapter")
 @Data
 public class ServiceConfig {
 
     /**
      * Map of service name to ServiceMetadata loaded from YAML
      */
-    private Map<String, ServiceMetadata> configs;
+    private Map<String, ServiceMetadata> services;
 
     // No Spring annotations in POJO ServiceMetadata (imported from commons)
 }

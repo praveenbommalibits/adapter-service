@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.adcb.adapter.spi.ProtocolHandler;
 import org.adcb.adapter.commons.ServiceMetadata;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.stereotype.Component;
 import org.springframework.ws.WebServiceMessage;
 import org.springframework.ws.client.WebServiceIOException;
 import org.springframework.ws.client.core.WebServiceMessageExtractor;
@@ -14,6 +15,7 @@ import org.springframework.ws.soap.client.SoapFaultClientException;
  * SOAP protocol handler implementation for invoking SOAP downstream endpoints.
  */
 @Slf4j
+@Component("SOAP")
 public class SoapProtocolHandler implements ProtocolHandler {
 
     private final WebServiceTemplate webServiceTemplate;
