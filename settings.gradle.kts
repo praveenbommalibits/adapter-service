@@ -10,8 +10,10 @@ include(
     "adapter-protocol-rest",
     "adapter-protocol-grpc",
     "adapter-transform-core",
-    "adapter-security"
+    "adapter-security",
+    "adapter-protocol-proxy",
+    "adapter-protocol-soap"
 )
 
-include("adapter-protocol-soap")
-include("adapter-protocol-proxy")
+//include("adapter-protocol-soap")
+//include("adapter-protocol-proxy")
