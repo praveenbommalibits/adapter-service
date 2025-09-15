@@ -44,7 +44,7 @@ jobs:
         id: current_version
         run: |
           VERSION=$(grep "version" gradle.properties | cut -d'=' -f2 | sed 's/-SNAPSHOT//')
-          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Calculate new version
         id: version
