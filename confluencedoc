@@ -1306,3 +1306,455 @@ This documentation is maintained in the repository and should be updated with ea
 ---
 
 *This documentation provides comprehensive coverage of the ADCB Adapter Platform. For specific implementation questions or issues not covered here, please reach out to the development team through the support channels listed above.*
+
+
+
+
+
+-----
+
+
+### Authentication Flow Integration
+
+#### Pre-Request Authentication
+```java
+// In Protocol Handler
+public Object execute(ServiceMetadata config, Object requestBody) {
+    // 1. Resolve authentication strategy
+    AuthenticationStrategy authStrategy = getAuthStrategy(config.getAuthenticationType());
+    
+    // 2. Apply authentication with retry for token refresh
+    try {
+        authStrategy.applyAuthentication(config, headers, requestBody);
+    } catch (TokenExpiredException e) {
+        // Refresh token and retry
+        authStrategy.refreshToken(config);
+        authStrategy.applyAuthentication(config, headers, requestBody);
+    }
+    
+    // 3. Execute request with authenticated headers
+    return executeRequest(config, headers, requestBody);
+}
+```
+
+### Security Best Practices
+
+1. **Credential Management**:
+   - Never hardcode credentials in configuration
+   - Use environment variables or secret management systems
+   - Implement credential rotation strategies
+
+2. **Token Security**:
+   - Cache tokens securely in memory only
+   - Implement token refresh before expiry
+   - Clear sensitive data after use
+
+3. **Error Handling**:
+   - Don't expose credentials in logs or error messages
+   - Implement proper authentication error mapping
+   - Monitor authentication failures for security alerts
+
+---
+
+## Resilience Patterns
+
+### Overview
+
+The ADCB Adapter Platform implements comprehensive resilience patterns to ensure system stability and fault tolerance when integrating with external services. The resilience framework includes retry mechanisms, circuit breakers, timeout management, and bulkhead isolation.
+
+### 1. Retry Mechanism
+
+#### Retry Strategies
+
+**Fixed Interval Retry**:
+```yaml
+adapter:
+  services:
+    unstable_service:
+      protocol: REST_JSON
+      endpointUrl: https://unreliable-api.com/data
+      resilience:
+        retry:
+          enabled: true
+          strategy: FIXED_INTERVAL
+          maxAttempts: 3
+          interval: 1000  # 1 second
+          retryableExceptions:
+            - "java.net.SocketTimeoutException"
+            - "java.net.ConnectException"
+            - "org.springframework.web.client.ResourceAccessException"
+          retryableHttpStatus:
+            - 500
+            - 502
+            - 503
+            - 504
+```
+
+**Exponential Backoff Retry**:
+```yaml
+adapter:
+  services:
+    rate_limited_service:
+      resilience:
+        retry:
+          enabled: true
+          strategy: EXPONENTIAL_BACKOFF
+          maxAttempts: 5
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 30000
+          jitterEnabled: true  # Adds randomness to prevent thundering herd
+```
+
+**Linear Backoff Retry**:
+```yaml
+adapter:
+  services:
+    gradual_service:
+      resilience:
+        retry:
+          strategy: LINEAR_BACKOFF
+          maxAttempts: 4
+          initialInterval: 2000
+          increment: 1000  # 2s, 3s, 4s, 5s
+```
+
+#### Retry Implementation
+
+```java
+@Component
+public class RetryHandler {
+    
+    public <T> T executeWithRetry(ServiceMetadata config, Supplier<T> operation) {
+        RetryConfig retryConfig = config.getResilience().getRetry();
+        
+        for (int attempt = 1; attempt <= retryConfig.getMaxAttempts(); attempt++) {
+            try {
+                return operation.get();
+            } catch (Exception e) {
+                if (!isRetryableException(e, retryConfig) || 
+                    attempt == retryConfig.getMaxAttempts()) {
+                    throw e;
+                }
+                
+                long delay = calculateDelay(attempt, retryConfig);
+                log.warn("Attempt {}/{} failed, retrying in {}ms: {}", 
+                         attempt, retryConfig.getMaxAttempts(), delay, e.getMessage());
+                
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Retry interrupted", ie);
+                }
+            }
+        }
+        throw new RuntimeException("All retry attempts exhausted");
+    }
+}
+```
+
+### 2. Circuit Breaker Pattern
+
+#### Circuit Breaker States
+
+```
+    [CLOSED] â”€â”€failure_thresholdâ”€â”€â–º [OPEN]
+        â–²                             â”‚
+        â”‚                             â”‚
+        â”‚                             â”‚ wait_duration
+        â”‚                             â”‚
+        â”‚                             â–¼
+    success â—„â”€â”€success_thresholdâ”€â”€ [HALF_OPEN]
+```
+
+#### Configuration
+
+```yaml
+adapter:
+  services:
+    fragile_service:
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50  # 50% failure rate triggers OPEN
+          slowCallRateThreshold: 70  # 70% slow calls triggers OPEN
+          slowCallDurationThreshold: 5000  # 5 seconds
+          waitDurationInOpenState: 30000  # 30 seconds in OPEN state
+          slidingWindowType: COUNT_BASED  # or TIME_BASED
+          slidingWindowSize: 10  # Last 10 calls
+          minimumNumberOfCalls: 5  # Minimum calls before evaluation
+          permittedNumberOfCallsInHalfOpenState: 3
+          automaticTransitionFromOpenToHalfOpenEnabled: true
+```
+
+#### Circuit Breaker Implementation
+
+```java
+@Component
+public class CircuitBreakerManager {
+    
+    private final Map<String, CircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
+    
+    public <T> T executeWithCircuitBreaker(String serviceName, 
+                                          ServiceMetadata config, 
+                                          Supplier<T> operation) {
+        CircuitBreaker circuitBreaker = getOrCreateCircuitBreaker(serviceName, config);
+        
+        return circuitBreaker.executeSupplier(() -> {
+            try {
+                T result = operation.get();
+                // Record success
+                circuitBreaker.recordSuccess();
+                return result;
+            } catch (Exception e) {
+                // Record failure
+                circuitBreaker.recordException(e);
+                throw e;
+            }
+        });
+    }
+    
+    private CircuitBreaker getOrCreateCircuitBreaker(String serviceName, ServiceMetadata config) {
+        return circuitBreakers.computeIfAbsent(serviceName, key -> {
+            CircuitBreakerConfig cbConfig = CircuitBreakerConfig.custom()
+                .failureRateThreshold(config.getCircuitBreaker().getFailureRateThreshold())
+                .waitDurationInOpenState(Duration.ofMillis(config.getCircuitBreaker().getWaitDuration()))
+                .slidingWindowSize(config.getCircuitBreaker().getSlidingWindowSize())
+                .minimumNumberOfCalls(config.getCircuitBreaker().getMinimumNumberOfCalls())
+                .build();
+                
+            return CircuitBreaker.of(serviceName, cbConfig);
+        });
+    }
+}
+```
+
+### 3. Timeout Management
+
+#### Multi-Level Timeout Configuration
+
+```yaml
+adapter:
+  # Global defaults
+  defaults:
+    connectionTimeout: 5000    # Connection establishment
+    readTimeout: 15000        # Response read timeout
+    writeTimeout: 10000       # Request write timeout
+    
+  services:
+    slow_service:
+      protocol: REST_JSON
+      endpointUrl: https://slow-api.com/data
+      timeouts:
+        connectionTimeout: 10000  # Override global default
+        readTimeout: 30000        # Extended for slow responses
+        writeTimeout: 15000       # Extended for large payloads
+        totalTimeout: 45000       # Total request timeout
+```
+
+#### Timeout Implementation
+
+```java
+public class TimeoutAwareProtocolHandler {
+    
+    public Object executeWithTimeout(ServiceMetadata config, Object requestBody) {
+        TimeoutConfig timeouts = config.getTimeouts();
+        
+        return CompletableFuture.supplyAsync(() -> {
+            // Configure WebClient with timeouts
+            WebClient client = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create()
+                        .responseTimeout(Duration.ofMillis(timeouts.getReadTimeout()))
+                        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeouts.getConnectionTimeout())
+                ))
+                .build();
+                
+            return executeRequest(client, config, requestBody);
+        })
+        .orTimeout(timeouts.getTotalTimeout(), TimeUnit.MILLISECONDS)
+        .exceptionally(throwable -> {
+            if (throwable instanceof TimeoutException) {
+                throw new ServiceTimeoutException("Service call exceeded timeout: " + 
+                    timeouts.getTotalTimeout() + "ms", throwable);
+            }
+            throw new ServiceException("Service call failed", throwable);
+        })
+        .join();
+    }
+}
+```
+
+### 4. Bulkhead Isolation
+
+#### Thread Pool Isolation
+
+```yaml
+adapter:
+  threadPools:
+    critical_services:
+      corePoolSize: 10
+      maxPoolSize: 20
+      queueCapacity: 100
+      threadNamePrefix: "critical-"
+      services:
+        - payment_service
+        - account_service
+        
+    general_services:
+      corePoolSize: 5
+      maxPoolSize: 15
+      queueCapacity: 50
+      threadNamePrefix: "general-"
+      services:
+        - notification_service
+        - audit_service
+```
+
+#### Connection Pool Isolation
+
+```yaml
+adapter:
+  connectionPools:
+    high_priority:
+      maxConnections: 50
+      maxConnectionsPerRoute: 10
+      connectionTimeout: 5000
+      socketTimeout: 15000
+      services:
+        - core_banking_api
+        - payment_gateway
+        
+    low_priority:
+      maxConnections: 20
+      maxConnectionsPerRoute: 5
+      connectionTimeout: 10000
+      socketTimeout: 30000
+      services:
+        - reporting_service
+        - analytics_service
+```
+
+### 5. Comprehensive Resilience Configuration
+
+#### Service-Level Resilience Stack
+
+```yaml
+adapter:
+  services:
+    critical_payment_service:
+      protocol: REST_JSON
+      endpointUrl: https://payments.adcb.com/api/v1/transfer
+      
+      # Authentication with retry
+      authentication:
+        type: OAUTH2
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${PAYMENT_CLIENT_ID}
+        clientSecret: ${PAYMENT_CLIENT_SECRET}
+        retryConfig:
+          maxAttempts: 3
+          backoffInterval: 1000
+      
+      # Comprehensive resilience
+      resilience:
+        # Circuit breaker for fault tolerance
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 30    # Lower threshold for critical service
+          waitDurationInOpenState: 20000  # Shorter recovery time
+          slidingWindowSize: 20
+          minimumNumberOfCalls: 10
+          
+        # Retry for transient failures
+        retry:
+          enabled: true
+          strategy: EXPONENTIAL_BACKOFF
+          maxAttempts: 3
+          initialInterval: 500
+          multiplier: 2.0
+          maxInterval: 5000
+          jitterEnabled: true
+          
+        # Timeout management
+        timeouts:
+          connectionTimeout: 3000     # Quick connection for critical service
+          readTimeout: 10000         # Reasonable response time
+          totalTimeout: 15000        # Total operation timeout
+          
+        # Rate limiting
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 100
+          timeoutDuration: 1000
+          
+      # Thread pool assignment
+      threadPool: critical_services
+      connectionPool: high_priority
+```
+
+### 6. Resilience Monitoring and Metrics
+
+#### Health Check Integration
+
+```yaml
+management:
+  health:
+    circuitbreaker:
+      enabled: true
+    ratelimiters:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+#### Custom Resilience Metrics
+
+```java
+@Component
+public class ResilienceMetrics {
+    
+    private final MeterRegistry meterRegistry;
+    
+    public ResilienceMetrics(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
+    
+    public void recordCircuitBreakerState(String serviceName, CircuitBreaker.State state) {
+        Gauge.builder("adapter.circuitbreaker.state")
+            .tag("service", serviceName)
+            .tag("state", state.name())
+            .register(meterRegistry, state, s -> s == CircuitBreaker.State.CLOSED ? 1 : 0);
+    }
+    
+    public void recordRetryAttempt(String serviceName, int attempt, boolean success) {
+        Counter.builder("adapter.retry.attempts")
+            .tag("service", serviceName)
+            .tag("attempt", String.valueOf(attempt))
+            .tag("success", String.valueOf(success))
+            .register(meterRegistry)
+            .increment();
+    }
+    
+    public void recordTimeout(String serviceName, String timeoutType, Duration duration) {
+        Timer.builder("adapter.timeout")
+            .tag("service", serviceName)
+            .tag("type", timeoutType)
+            .register(meterRegistry)
+            .record(duration);
+    }
+}
+```
+
+#### Resilience Dashboard Metrics
+
+Available metrics for monitoring:
+- `adapter.circuitbreaker.calls.total` - Total circuit breaker calls
+- `adapter.circuitbreaker.state` - Circuit breaker state gauge
+- `adapter.retry.attempts.total` - Retry attempt counters
+- `adapter.timeout.duration` - Timeout duration histograms
+- `adapter.bulkhead.queue.size` - Thread pool queue sizes
+- `adapter.ratelimiter.permits` - Rate limiter permit usage
