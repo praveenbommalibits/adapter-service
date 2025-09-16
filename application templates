@@ -1,0 +1,1290 @@
+# ADCB Adapter Platform - Complete Configuration Example
+# application.yml
+
+spring:
+  application:
+    name: adcb-adapter-platform
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:development}
+
+# Server configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /adapter
+
+# Management and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers,ratelimiters
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${SPRING_PROFILES_ACTIVE:development}
+
+# Logging configuration
+logging:
+  level:
+    org.adcb.adapter: INFO
+    org.adcb.adapter.gateway: DEBUG
+    org.adcb.adapter.protocol: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+
+---
+# ADCB Adapter Platform Configuration
+adapter:
+  # Template configuration
+  templates:
+    path: classpath:/adapter-templates/
+    cache:
+      enabled: true
+      maxSize: 1000
+      ttlMinutes: 60
+    validation:
+      enabled: true
+      strictMode: false
+
+  # Global authentication settings
+  authentication:
+    tokenCache:
+      enabled: true
+      maxSize: 1000
+      ttlMinutes: 55  # Refresh 5 minutes before expiry
+      cleanupInterval: 300  # 5 minutes
+    oauth:
+      defaultTimeout: 10000
+      maxRetries: 3
+    apiKey:
+      headerValidation: true
+
+  # Global resilience defaults
+  defaults:
+    resilience:
+      circuitBreaker:
+        slidingWindowType: TIME_BASED
+        slidingWindowSize: 60  # 60 seconds
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30000
+        minimumNumberOfCalls: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        permittedNumberOfCallsInHalfOpenState: 3
+      retry:
+        maxAttempts: 3
+        strategy: EXPONENTIAL_BACKOFF
+        initialInterval: 1000
+        multiplier: 2.0
+        maxInterval: 30000
+        jitterEnabled: true
+        retryableExceptions:
+          - "java.net.SocketTimeoutException"
+          - "java.net.ConnectException"
+          - "org.springframework.web.reactive.function.client.WebClientRequestException"
+          - "org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError"
+        retryableHttpStatus: [500, 502, 503, 504, 408, 429]
+      timeouts:
+        connectionTimeout: 5000
+        readTimeout: 15000
+        writeTimeout: 10000
+        totalTimeout: 30000
+      rateLimiter:
+        permitsPerSecond: 50
+        timeoutDuration: 1000
+
+  # Thread pool configurations
+  threadPools:
+    critical_services:
+      corePoolSize: 10
+      maxPoolSize: 20
+      queueCapacity: 100
+      threadNamePrefix: "critical-"
+      keepAliveSeconds: 60
+      services:
+        - core_banking_api
+        - payment_gateway
+        - card_services
+        
+    general_services:
+      corePoolSize: 5
+      maxPoolSize: 15
+      queueCapacity: 50
+      threadNamePrefix: "general-"
+      keepAliveSeconds: 60
+      services:
+        - customer_api
+        - account_services
+        - transaction_history
+        
+    low_priority_services:
+      corePoolSize: 2
+      maxPoolSize: 8
+      queueCapacity: 25
+      threadNamePrefix: "low-priority-"
+      keepAliveSeconds: 30
+      services:
+        - notification_service
+        - audit_service
+        - analytics_service
+
+  # Connection pool configurations
+  connectionPools:
+    high_priority:
+      maxConnections: 50
+      maxConnectionsPerRoute: 10
+      connectionTimeout: 3000
+      socketTimeout: 10000
+      services:
+        - core_banking_api
+        - payment_gateway
+        
+    standard:
+      maxConnections: 30
+      maxConnectionsPerRoute: 8
+      connectionTimeout: 5000
+      socketTimeout: 15000
+      services:
+        - customer_api
+        - account_services
+        
+    external:
+      maxConnections: 20
+      maxConnectionsPerRoute: 5
+      connectionTimeout: 10000
+      socketTimeout: 30000
+      services:
+        - external_credit_bureau
+        - exchange_rate_service
+
+  # Service configurations
+  services:
+    # ===============================================
+    # CRITICAL FINANCIAL SERVICES
+    # ===============================================
+    
+    # Core Banking API - JWT Authentication with Circuit Breaker
+    core_banking_api:
+      protocol: REST_JSON
+      endpointUrl: https://core-banking.adcb.com/api/v1
+      httpMethod: POST
+      priority: CRITICAL
+      
+      authentication:
+        type: JWT_BEARER
+        tokenSource: ${CORE_BANKING_JWT_TOKEN}
+        validation:
+          enabled: true
+          issuer: "adcb-core-banking"
+          audience: "adapter-platform"
+          algorithm: RS256
+          publicKeyUrl: https://core-banking.adcb.com/.well-known/jwks.json
+        additionalHeaders:
+          X-API-Version: "1.0"
+          X-Client-ID: "adapter-platform"
+          
+      headers:
+        Content-Type: application/json
+        Accept: application/json
+        X-Correlation-ID: "${correlationId}"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 20  # Very low tolerance for core banking
+          waitDurationInOpenState: 15000
+          minimumNumberOfCalls: 10
+          slowCallRateThreshold: 50
+          slowCallDurationThreshold: 8000
+        retry:
+          enabled: true
+          maxAttempts: 2  # Conservative for financial operations
+          strategy: FIXED_INTERVAL
+          interval: 2000
+        timeouts:
+          connectionTimeout: 3000
+          readTimeout: 10000
+          totalTimeout: 15000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 100
+          timeoutDuration: 2000
+          
+      templates:
+        request: core_banking_request.json
+        response: core_banking_response.json
+        
+      threadPool: critical_services
+      connectionPool: high_priority
+
+    # Payment Gateway - OAuth2 with Comprehensive Resilience
+    payment_gateway:
+      protocol: REST_JSON
+      endpointUrl: https://payments.adcb.com/api/v2/transfer
+      httpMethod: POST
+      priority: CRITICAL
+      
+      authentication:
+        type: OAUTH2
+        grantType: CLIENT_CREDENTIALS
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${PAYMENT_CLIENT_ID}
+        clientSecret: ${PAYMENT_CLIENT_SECRET}
+        scope: "payments:write payments:read"
+        tokenCache:
+          enabled: true
+          ttlBuffer: 300  # Refresh 5 minutes before expiry
+        retryConfig:
+          maxAttempts: 3
+          backoffInterval: 1000
+        additionalHeaders:
+          X-Payment-Source: "MOBILE_BANKING"
+          X-Risk-Level: "HIGH"
+          
+      headers:
+        Content-Type: application/json
+        Accept: application/json
+        X-Idempotency-Key: "${idempotencyKey}"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 25
+          waitDurationInOpenState: 20000
+          minimumNumberOfCalls: 8
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: EXPONENTIAL_BACKOFF
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 8000
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 15000
+          totalTimeout: 25000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 50
+          
+      templates:
+        request: payment_request.json
+        response: payment_response.json
+        
+      threadPool: critical_services
+      connectionPool: high_priority
+
+    # ===============================================
+    # STANDARD SERVICES
+    # ===============================================
+    
+    # Customer API - API Key Authentication
+    customer_api:
+      protocol: REST_JSON
+      endpointUrl: https://api.adcb.com/customers/v1
+      httpMethod: POST
+      priority: NORMAL
+      
+      authentication:
+        type: API_KEY
+        strategy: HEADER
+        keyName: X-API-Key
+        tokenSource: ${CUSTOMER_API_KEY}
+        additionalHeaders:
+          X-API-Version: "1.0"
+          X-Client-App: "MOBILE_BANKING"
+          X-Request-Type: "CUSTOMER_UPDATE"
+          
+      headers:
+        Content-Type: application/json
+        Accept: application/json
+        User-Agent: "ADCB-Adapter/1.0"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50
+          waitDurationInOpenState: 30000
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: EXPONENTIAL_BACKOFF
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 20000
+          totalTimeout: 30000
+          
+      templates:
+        request: customer_request.json
+        response: customer_response.json
+        
+      threadPool: general_services
+      connectionPool: standard
+
+    # Account Services - Multiple HTTP Methods
+    account_services:
+      protocol: REST_JSON
+      endpointUrl: https://accounts.adcb.com/api/v1/accounts
+      httpMethod: GET  # Can be overridden per call
+      priority: NORMAL
+      
+      authentication:
+        type: OAUTH2
+        grantType: CLIENT_CREDENTIALS
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${ACCOUNT_CLIENT_ID}
+        clientSecret: ${ACCOUNT_CLIENT_SECRET}
+        scope: "accounts:read accounts:write"
+        
+      supportedMethods:
+        - GET     # Account inquiry
+        - POST    # Account creation
+        - PUT     # Account update
+        - PATCH   # Partial account update
+        
+      headers:
+        Content-Type: application/json
+        Accept: application/json
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 45
+        retry:
+          enabled: true
+          maxAttempts: 4
+        timeouts:
+          readTimeout: 18000
+          
+      templates:
+        request: account_request.json
+        response: account_response.json
+        
+      threadPool: general_services
+      connectionPool: standard
+
+    # ===============================================
+    # EXTERNAL SERVICES
+    # ===============================================
+    
+    # External Credit Bureau - API Key with Query Parameter
+    external_credit_bureau:
+      protocol: REST_JSON
+      endpointUrl: https://api.creditbureau.ae/v2/reports
+      httpMethod: GET
+      priority: NORMAL
+      
+      authentication:
+        type: API_KEY
+        strategy: QUERY_PARAM
+        keyName: api_key
+        tokenSource: ${CREDIT_BUREAU_API_KEY}
+        additionalHeaders:
+          X-Partner-ID: "ADCB"
+          X-Request-Format: "JSON"
+          
+      queryParameters:
+        format: json
+        version: "2.0"
+        partner: ADCB
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 60  # More tolerant for external service
+          waitDurationInOpenState: 45000
+        retry:
+          enabled: true
+          maxAttempts: 5
+          strategy: EXPONENTIAL_BACKOFF
+          initialInterval: 2000
+        timeouts:
+          connectionTimeout: 10000
+          readTimeout: 25000
+          totalTimeout: 40000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 10  # External API rate limit
+          
+      templates:
+        request: credit_bureau_request.json
+        response: credit_bureau_response.json
+        
+      threadPool: general_services
+      connectionPool: external
+
+    # Exchange Rate Service - Public API with Rate Limiting
+    exchange_rate_service:
+      protocol: REST_JSON
+      endpointUrl: https://api.exchangerates.ae/v1/rates
+      httpMethod: GET
+      priority: LOW
+      
+      # No authentication required for public API
+      authentication:
+        type: NONE
+        
+      headers:
+        Accept: application/json
+        User-Agent: "ADCB-Bank-Services/1.0"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 70
+        retry:
+          enabled: true
+          maxAttempts: 3
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 30
+          
+      templates:
+        response: exchange_rate_response.json
+        
+      threadPool: low_priority_services
+      connectionPool: external
+
+    # ===============================================
+    # LEGACY SYSTEMS (PROXY)
+    # ===============================================
+    
+    # Legacy Mainframe - Basic Auth with Proxy
+    legacy_mainframe:
+      protocol: PROXY_PASS
+      endpointUrl: https://legacy.adcb.com/mainframe-gateway
+      priority: LOW
+      
+      authentication:
+        type: BASIC_AUTH
+        username: ${LEGACY_USERNAME}
+        password: ${LEGACY_PASSWORD}
+        charset: UTF-8
+        
+      proxy:
+        preserveHeaders: true
+        excludeHeaders:
+          - "Authorization"  # Will be replaced with basic auth
+          - "X-Forwarded-For"
+        addHeaders:
+          X-Legacy-Source: "ADAPTER_PLATFORM"
+          X-Legacy-Version: "1.0"
+        urlRewrite:
+          enabled: true
+          patterns:
+            - from: "/api/v1/"
+              to: "/legacy/v1/"
+              
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 75  # High tolerance for legacy
+          waitDurationInOpenState: 60000
+          minimumNumberOfCalls: 3
+        retry:
+          enabled: true
+          maxAttempts: 2  # Minimal retry for legacy systems
+          strategy: FIXED_INTERVAL
+          interval: 5000
+        timeouts:
+          connectionTimeout: 15000
+          readTimeout: 45000
+          totalTimeout: 60000
+          
+      threadPool: low_priority_services
+      connectionPool: external
+
+    # Internal Service Proxy - Simple Pass-through
+    internal_service_proxy:
+      protocol: PROXY_PASS
+      endpointUrl: https://internal-service.adcb.local
+      priority: NORMAL
+      
+      authentication:
+        type: JWT_BEARER
+        tokenSource: ${INTERNAL_SERVICE_JWT}
+        
+      proxy:
+        preserveHeaders: true
+        preserveQueryParams: true
+        addHeaders:
+          X-Proxy-Source: "ADAPTER_PLATFORM"
+          
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 40
+        retry:
+          enabled: true
+          maxAttempts: 2
+        timeouts:
+          totalTimeout: 20000
+          
+      threadPool: general_services
+
+    # ===============================================
+    # NOTIFICATION SERVICES
+    # ===============================================
+    
+    # SMS Notification Service
+    sms_notification:
+      protocol: REST_JSON
+      endpointUrl: https://sms.adcb.com/api/v1/send
+      httpMethod: POST
+      priority: LOW
+      
+      authentication:
+        type: API_KEY
+        strategy: HEADER
+        keyName: X-SMS-API-Key
+        tokenSource: ${SMS_API_KEY}
+        
+      headers:
+        Content-Type: application/json
+        X-SMS-Source: "BANKING_APP"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 60
+        retry:
+          enabled: true
+          maxAttempts: 4
+          strategy: LINEAR_BACKOFF
+          initialInterval: 3000
+          increment: 2000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 20
+          
+      templates:
+        request: sms_request.json
+        response: sms_response.json
+        
+      threadPool: low_priority_services
+
+    # Email Notification Service
+    email_notification:
+      protocol: REST_JSON
+      endpointUrl: https://email.adcb.com/api/v2/send
+      httpMethod: POST
+      priority: LOW
+      
+      authentication:
+        type: OAUTH2
+        grantType: CLIENT_CREDENTIALS
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${EMAIL_CLIENT_ID}
+        clientSecret: ${EMAIL_CLIENT_SECRET}
+        scope: "email:send"
+        
+      headers:
+        Content-Type: application/json
+        X-Email-Priority: "NORMAL"
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50
+        retry:
+          enabled: true
+          maxAttempts: 3
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 15
+          
+      templates:
+        request: email_request.json
+        response: email_response.json
+        
+      threadPool: low_priority_services
+
+    # ===============================================
+    # ANALYTICS AND REPORTING
+    # ===============================================
+    
+    # Analytics Service - Custom Authentication
+    analytics_service:
+      protocol: REST_JSON
+      endpointUrl: https://analytics.adcb.com/api/v1/events
+      httpMethod: POST
+      priority: LOW
+      
+      authentication:
+        type: CUSTOM_AUTH
+        strategy: SIGNATURE_BASED
+        secretKey: ${ANALYTICS_SECRET_KEY}
+        algorithm: HMAC_SHA256
+        headers:
+          X-Signature: "${signature}"
+          X-Timestamp: "${timestamp}"
+          X-Client-ID: "adapter-platform"
+          
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 80  # Very tolerant for analytics
+        retry:
+          enabled: true
+          maxAttempts: 2
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 100  # High throughput for events
+          
+      templates:
+        request: analytics_request.json
+        
+      threadPool: low_priority_services
+
+---
+# Environment-specific overrides
+spring:
+  profiles: development
+  
+adapter:
+  debug:
+    enabled: true
+    logRequests: true
+    logResponses: true
+    logHeaders: false  # Security: don't log sensitive headers
+    
+  # Override endpoints for development
+  services:
+    core_banking_api:
+      endpointUrl: https://dev-core-banking.adcb.com/api/v1
+    payment_gateway:
+      endpointUrl: https://dev-payments.adcb.com/api/v2/transfer
+    customer_api:
+      endpointUrl: https://dev-api.adcb.com/customers/v1
+
+---
+spring:
+  profiles: production
+  
+adapter:
+  debug:
+    enabled: false
+    logRequests: false
+    logResponses: false
+    
+  # Production-specific resilience settings
+  defaults:
+    resilience:
+      circuitBreaker:
+        failureRateThreshold: 40  # More sensitive in production
+      retry:
+        maxAttempts: 2  # More conservative in production
+        
+  # Production connection pools
+  connectionPools:
+    high_priority:
+      maxConnections: 100
+      maxConnectionsPerRoute: 20
+    standard:
+      maxConnections: 60
+      maxConnectionsPerRoute: 15
+
+---
+spring:
+  profiles: testing
+  
+adapter:
+  # Override all services to point to WireMock for testing
+  services:
+    core_banking_api:
+      endpointUrl: http://localhost:8089/core-banking
+    payment_gateway:
+      endpointUrl: http://localhost:8089/payments
+    customer_api:
+      endpointUrl: http://localhost:8089/customers
+      
+  # Disable resilience patterns for testing
+  defaults:
+    resilience:
+      circuitBreaker:
+        enabled: false
+      retry:
+        enabled: false
+      rateLimiter:
+        enabled: false     # SOAP Protocol Service Configurations
+adapter:
+  services:
+    
+    # ===============================================
+    # SOAP SERVICES - CRITICAL FINANCIAL
+    # ===============================================
+    
+    # Payment Gateway SOAP - WS-Security with Username Token
+    payment_gateway_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://payments.adcb.com/soap/v2/PaymentService
+      wsdlUrl: https://payments.adcb.com/soap/v2/PaymentService?wsdl
+      soapAction: "http://adcb.com/payments/ProcessPayment"
+      priority: CRITICAL
+      
+      # SOAP-specific configuration
+      soap:
+        version: "1.2"  # SOAP 1.1 or 1.2
+        namespace: "http://adcb.com/payments/v2"
+        operation: "processPayment"
+        bindingName: "PaymentServiceSoapBinding"
+        portName: "PaymentServicePort"
+        
+      # WS-Security Authentication
+      authentication:
+        type: WS_SECURITY_USERNAME_TOKEN
+        username: ${PAYMENT_SOAP_USERNAME}
+        password: ${PAYMENT_SOAP_PASSWORD}
+        passwordType: DIGEST  # DIGEST or TEXT
+        addNonce: true
+        addCreated: true
+        timeToLive: 300  # 5 minutes
+        additionalHeaders:
+          X-Payment-Source: "MOBILE_BANKING"
+          X-Risk-Level: "HIGH"
+          X-Transaction-Type: "FUND_TRANSFER"
+      
+      # SOAP Headers
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: "\"http://adcb.com/payments/ProcessPayment\""
+        X-Correlation-ID: "${correlationId}"
+        X-Request-ID: "${requestId}"
+        
+      # Custom SOAP Headers (added to SOAP envelope)
+      soapHeaders:
+        - name: "MessageHeader"
+          namespace: "http://adcb.com/common/v1"
+          value: |
+            <MessageHeader xmlns="http://adcb.com/common/v1">
+              <MessageId>${messageId}</MessageId>
+              <Timestamp>${timestamp}</Timestamp>
+              <SourceSystem>ADAPTER_PLATFORM</SourceSystem>
+            </MessageHeader>
+        - name: "SecurityContext"
+          namespace: "http://adcb.com/security/v1"
+          value: |
+            <SecurityContext xmlns="http://adcb.com/security/v1">
+              <ClientId>${clientId}</ClientId>
+              <SessionId>${sessionId}</SessionId>
+            </SecurityContext>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 25
+          waitDurationInOpenState: 20000
+          minimumNumberOfCalls: 8
+          slowCallRateThreshold: 60
+          slowCallDurationThreshold: 15000
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: EXPONENTIAL_BACKOFF
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 8000
+          retryableSoapFaults:
+            - "Server"
+            - "VersionMismatch"
+            - "DataEncodingUnknown"
+          retryableHttpStatus: [500, 502, 503, 504, 408]
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 20000
+          totalTimeout: 30000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 50
+          
+      templates:
+        request: payment_soap_request.xml
+        response: payment_soap_response.xml
+        fault: payment_soap_fault.xml
+        
+      threadPool: critical_services
+      connectionPool: high_priority
+
+    # Core Banking SOAP - Certificate-based Authentication
+    core_banking_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://core-banking.adcb.com/soap/v1/AccountService
+      wsdlUrl: https://core-banking.adcb.com/soap/v1/AccountService?wsdl
+      soapAction: "http://adcb.com/core/AccountInquiry"
+      priority: CRITICAL
+      
+      soap:
+        version: "1.1"
+        namespace: "http://adcb.com/core/v1"
+        operation: "accountInquiry"
+        bindingName: "AccountServiceSoapBinding"
+        portName: "AccountServicePort"
+        
+      # Certificate-based Authentication (Mutual TLS)
+      authentication:
+        type: CERTIFICATE_BASED
+        keystorePath: ${CORE_BANKING_KEYSTORE_PATH}
+        keystorePassword: ${CORE_BANKING_KEYSTORE_PASSWORD}
+        keystoreType: PKCS12
+        truststorePath: ${CORE_BANKING_TRUSTSTORE_PATH}
+        truststorePassword: ${CORE_BANKING_TRUSTSTORE_PASSWORD}
+        clientCertAlias: "adcb-adapter-client"
+        serverCertValidation: true
+        additionalHeaders:
+          X-Client-Certificate: "PRESENT"
+          X-API-Version: "1.0"
+      
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: "\"http://adcb.com/core/AccountInquiry\""
+        
+      soapHeaders:
+        - name: "RequestHeader"
+          namespace: "http://adcb.com/core/common"
+          value: |
+            <RequestHeader xmlns="http://adcb.com/core/common">
+              <RequestId>${requestId}</RequestId>
+              <Timestamp>${timestamp}</Timestamp>
+              <Version>1.0</Version>
+              <Channel>MOBILE</Channel>
+            </RequestHeader>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 20  # Very low tolerance for core banking
+          waitDurationInOpenState: 15000
+          minimumNumberOfCalls: 10
+        retry:
+          enabled: true
+          maxAttempts: 2  # Conservative for financial operations
+          strategy: FIXED_INTERVAL
+          interval: 2000
+        timeouts:
+          connectionTimeout: 3000
+          readTimeout: 12000
+          totalTimeout: 18000
+          
+      ssl:
+        enabled: true
+        protocol: "TLSv1.3"
+        cipherSuites:
+          - "TLS_AES_256_GCM_SHA384"
+          - "TLS_AES_128_GCM_SHA256"
+        verifyHostname: true
+        
+      templates:
+        request: core_banking_soap_request.xml
+        response: core_banking_soap_response.xml
+        
+      threadPool: critical_services
+      connectionPool: high_priority
+
+    # ===============================================
+    # SOAP SERVICES - EXTERNAL INTEGRATIONS
+    # ===============================================
+    
+    # Credit Bureau SOAP - Basic Authentication
+    credit_bureau_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://soap.creditbureau.ae/CreditReportService/v2
+      wsdlUrl: https://soap.creditbureau.ae/CreditReportService/v2?wsdl
+      soapAction: "http://creditbureau.ae/GetCreditReport"
+      priority: NORMAL
+      
+      soap:
+        version: "1.1"
+        namespace: "http://creditbureau.ae/services/v2"
+        operation: "getCreditReport"
+        bindingName: "CreditReportServiceBinding"
+        
+      # Basic Authentication for SOAP
+      authentication:
+        type: BASIC_AUTH
+        username: ${CREDIT_BUREAU_USERNAME}
+        password: ${CREDIT_BUREAU_PASSWORD}
+        charset: UTF-8
+        preemptive: true  # Send auth header with first request
+        additionalHeaders:
+          X-Partner-ID: "ADCB"
+          X-Request-Source: "BANKING_SYSTEM"
+      
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: "\"http://creditbureau.ae/GetCreditReport\""
+        User-Agent: "ADCB-Adapter/1.0"
+        
+      soapHeaders:
+        - name: "PartnerInfo"
+          namespace: "http://creditbureau.ae/partner/v1"
+          value: |
+            <PartnerInfo xmlns="http://creditbureau.ae/partner/v1">
+              <PartnerId>ADCB</PartnerId>
+              <RequestTime>${timestamp}</RequestTime>
+              <Version>2.0</Version>
+            </PartnerInfo>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 60  # More tolerant for external service
+          waitDurationInOpenState: 45000
+        retry:
+          enabled: true
+          maxAttempts: 4
+          strategy: EXPONENTIAL_BACKOFF
+          initialInterval: 2000
+          multiplier: 1.5
+        timeouts:
+          connectionTimeout: 10000
+          readTimeout: 30000
+          totalTimeout: 45000
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 10  # External API rate limit
+          
+      templates:
+        request: credit_bureau_soap_request.xml
+        response: credit_bureau_soap_response.xml
+        
+      threadPool: general_services
+      connectionPool: external
+
+    # Government Tax Authority SOAP - Custom Token Authentication
+    tax_authority_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://soap.tax.gov.ae/TaxValidationService/v1
+      wsdlUrl: https://soap.tax.gov.ae/TaxValidationService/v1?wsdl
+      soapAction: "http://tax.gov.ae/ValidateTaxNumber"
+      priority: NORMAL
+      
+      soap:
+        version: "1.2"
+        namespace: "http://tax.gov.ae/validation/v1"
+        operation: "validateTaxNumber"
+        
+      # Custom Token Authentication (Government API)
+      authentication:
+        type: CUSTOM_TOKEN
+        tokenType: "GOVERNMENT_API_TOKEN"
+        tokenHeader: "X-Gov-API-Token"
+        tokenSource: ${TAX_AUTHORITY_TOKEN}
+        tokenPrefix: "Bearer "
+        additionalHeaders:
+          X-Agency-Code: "ADCB"
+          X-Request-Category: "BANK_VALIDATION"
+          X-Compliance-Level: "HIGH"
+      
+      headers:
+        Content-Type: "application/soap+xml; charset=utf-8"  # SOAP 1.2
+        Action: "http://tax.gov.ae/ValidateTaxNumber"
+        
+      soapHeaders:
+        - name: "AuthenticationInfo"
+          namespace: "http://tax.gov.ae/auth/v1"
+          value: |
+            <AuthenticationInfo xmlns="http://tax.gov.ae/auth/v1">
+              <AgencyCode>ADCB</AgencyCode>
+              <RequesterId>${requesterId}</RequesterId>
+              <Timestamp>${timestamp}</Timestamp>
+            </AuthenticationInfo>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: LINEAR_BACKOFF
+          initialInterval: 3000
+          increment: 2000
+        timeouts:
+          connectionTimeout: 8000
+          readTimeout: 25000
+          
+      templates:
+        request: tax_validation_soap_request.xml
+        response: tax_validation_soap_response.xml
+        
+      threadPool: general_services
+
+    # ===============================================
+    # SOAP SERVICES - LEGACY SYSTEMS
+    # ===============================================
+    
+    # Legacy Accounting System - SOAP 1.1 with Custom Headers
+    legacy_accounting_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://legacy.adcb.com/soap/AccountingService
+      wsdlUrl: https://legacy.adcb.com/soap/AccountingService?wsdl
+      soapAction: "PostAccountingEntry"
+      priority: LOW
+      
+      soap:
+        version: "1.1"  # Legacy system requirement
+        namespace: "http://adcb.com/legacy/accounting"
+        operation: "postEntry"
+        maintainSession: true  # Legacy session requirement
+        
+      # Legacy system with API key in custom header
+      authentication:
+        type: API_KEY
+        strategy: CUSTOM_HEADER
+        keyName: "X-Legacy-API-Key"
+        tokenSource: ${LEGACY_ACCOUNTING_KEY}
+        additionalHeaders:
+          X-System-Code: "CORE_BANKING"
+          X-Legacy-Version: "2.1"
+          X-User-Context: "${userContext}"
+      
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: "PostAccountingEntry"
+        X-Legacy-Client: "ADAPTER_PLATFORM"
+        
+      soapHeaders:
+        - name: "LegacyHeader"
+          namespace: "http://adcb.com/legacy/common"
+          value: |
+            <LegacyHeader xmlns="http://adcb.com/legacy/common">
+              <SystemCode>CORE_BANKING</SystemCode>
+              <UserCode>${userCode}</UserCode>
+              <BranchCode>${branchCode}</BranchCode>
+              <TransactionDate>${transactionDate}</TransactionDate>
+            </LegacyHeader>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 75  # High tolerance for legacy
+          waitDurationInOpenState: 60000
+          minimumNumberOfCalls: 3
+        retry:
+          enabled: true
+          maxAttempts: 2  # Minimal retry for legacy systems
+          strategy: FIXED_INTERVAL
+          interval: 5000
+        timeouts:
+          connectionTimeout: 15000
+          readTimeout: 45000
+          totalTimeout: 60000
+          
+      # Legacy system specific settings
+      legacy:
+        encoding: "UTF-8"
+        soapFaultHandling: "LEGACY_FORMAT"
+        sessionTimeout: 300000  # 5 minutes
+        
+      templates:
+        request: legacy_accounting_soap_request.xml
+        response: legacy_accounting_soap_response.xml
+        
+      threadPool: low_priority_services
+      connectionPool: external
+
+    # ===============================================
+    # SOAP SERVICES - INSURANCE INTEGRATION
+    # ===============================================
+    
+    # Insurance Provider SOAP - WS-Security with X509 Token
+    insurance_provider_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://soap.insurance.ae/PolicyService/v3
+      wsdlUrl: https://soap.insurance.ae/PolicyService/v3?wsdl
+      soapAction: "http://insurance.ae/policy/CreatePolicy"
+      priority: NORMAL
+      
+      soap:
+        version: "1.2"
+        namespace: "http://insurance.ae/policy/v3"
+        operation: "createPolicy"
+        
+      # WS-Security with X509 Certificate Token
+      authentication:
+        type: WS_SECURITY_X509_TOKEN
+        keystorePath: ${INSURANCE_KEYSTORE_PATH}
+        keystorePassword: ${INSURANCE_KEYSTORE_PASSWORD}
+        certificateAlias: "insurance-client-cert"
+        signatureMethod: "RSA_SHA256"
+        canonicalizationMethod: "EXCLUSIVE"
+        digestMethod: "SHA256"
+        additionalHeaders:
+          X-Insurance-Partner: "ADCB"
+          X-Product-Line: "BANCASSURANCE"
+      
+      headers:
+        Content-Type: "application/soap+xml; charset=utf-8"
+        Action: "http://insurance.ae/policy/CreatePolicy"
+        
+      soapHeaders:
+        - name: "InsuranceContext"
+          namespace: "http://insurance.ae/context/v1"
+          value: |
+            <InsuranceContext xmlns="http://insurance.ae/context/v1">
+              <PartnerId>ADCB</PartnerId>
+              <ChannelId>INTERNET_BANKING</ChannelId>
+              <ProductType>LIFE_INSURANCE</ProductType>
+              <RequestTime>${timestamp}</RequestTime>
+            </InsuranceContext>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 45
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: EXPONENTIAL_BACKOFF
+        timeouts:
+          connectionTimeout: 8000
+          readTimeout: 20000
+          
+      templates:
+        request: insurance_policy_soap_request.xml
+        response: insurance_policy_soap_response.xml
+        
+      threadPool: general_services
+
+    # ===============================================
+    # SOAP SERVICES - NOTIFICATION SYSTEMS
+    # ===============================================
+    
+    # SMS Gateway SOAP - Simple Authentication
+    sms_gateway_soap:
+      protocol: SOAP_WS
+      endpointUrl: https://sms.gateway.ae/SMSService/v1
+      wsdlUrl: https://sms.gateway.ae/SMSService/v1?wsdl
+      soapAction: "http://gateway.ae/sms/SendSMS"
+      priority: LOW
+      
+      soap:
+        version: "1.1"
+        namespace: "http://gateway.ae/sms/v1"
+        operation: "sendSMS"
+        
+      authentication:
+        type: API_KEY
+        strategy: SOAP_HEADER
+        keyName: "APIKey"
+        tokenSource: ${SMS_GATEWAY_API_KEY}
+        additionalHeaders:
+          X-SMS-Category: "BANKING_NOTIFICATION"
+          X-Priority: "NORMAL"
+      
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: "\"http://gateway.ae/sms/SendSMS\""
+        
+      soapHeaders:
+        - name: "SMSHeader"
+          namespace: "http://gateway.ae/sms/header/v1"
+          value: |
+            <SMSHeader xmlns="http://gateway.ae/sms/header/v1">
+              <ClientId>ADCB</ClientId>
+              <MessageType>NOTIFICATION</MessageType>
+              <Priority>NORMAL</Priority>
+            </SMSHeader>
+        
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 65
+        retry:
+          enabled: true
+          maxAttempts: 4
+          strategy: LINEAR_BACKOFF
+          initialInterval: 2000
+          increment: 1500
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 25
+          
+      templates:
+        request: sms_soap_request.xml
+        response: sms_soap_response.xml
+        
+      threadPool: low_priority_services
+
+# ===============================================
+# SOAP-SPECIFIC GLOBAL CONFIGURATION
+# ===============================================
+
+  # SOAP-specific global settings
+  soap:
+    defaults:
+      version: "1.2"
+      encoding: "UTF-8"
+      maintainSession: false
+      validateResponse: true
+      handleMustUnderstand: true
+      
+    # SOAP fault handling
+    faultHandling:
+      enabled: true
+      logFaults: true
+      mapToStandardErrors: true
+      retryOnFault: true
+      faultMappings:
+        "Client": "BAD_REQUEST"
+        "Server": "INTERNAL_SERVER_ERROR"
+        "VersionMismatch": "UNSUPPORTED_VERSION"
+        "MustUnderstand": "PROCESSING_ERROR"
+        "DataEncodingUnknown": "ENCODING_ERROR"
+        
+    # WS-Security defaults
+    wsSecurity:
+      timestampTtl: 300  # 5 minutes
+      enableTimestamp: true
+      enableSignature: false  # Enable per service as needed
+      enableEncryption: false  # Enable per service as needed
+      
+    # SSL/TLS settings for SOAP services
+    ssl:
+      protocol: "TLSv1.3"
+      verifyHostname: true
+      allowSelfSigned: false  # Only in development
+      trustAllCertificates: false  # Only in development
+      
+  # SOAP connection pool settings
+  soapConnectionPools:
+    secure_soap:
+      maxConnections: 30
+      maxConnectionsPerRoute: 8
+      connectionTimeout: 8000
+      socketTimeout: 20000
+      services:
+        - core_banking_soap
+        - payment_gateway_soap
+        
+    external_soap:
+      maxConnections: 20
+      maxConnectionsPerRoute: 5
+      connectionTimeout: 12000
+      socketTimeout: 30000
+      services:
+        - credit_bureau_soap
+        - tax_authority_soap
+        - insurance_provider_soap
+        
+    legacy_soap:
+      maxConnections: 10
+      maxConnectionsPerRoute: 3
+      connectionTimeout: 20000
+      socketTimeout: 60000
+      keepAliveTimeout: 30000
+      services:
+        - legacy_accounting_soap
+
