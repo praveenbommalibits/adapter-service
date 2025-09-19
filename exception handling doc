@@ -1,0 +1,228 @@
+#  Adapter Platform Exception Handling & Response Standardization
+
+---
+
+## Overview
+
+This document details the exception and error handling strategy for the  Adapter Service and microservices level, targeting a robust standard for microservices that deal with a variety of downstream protocols (REST, SOAP, gRPC, Kafka, DB, etc.). Industry best practices and our architectural approach combine to ensure all success and error responses are delivered in a standard, business-relevant JSON format, making error handling seamless across the microservice ecosystem.
+
+---
+
+## Industry Standard in Microservice Exception Handling
+
+### Handling Functional & Non-Functional Errors
+
+- **Functional Errors (Business errors):**
+  - Violation of business rules (e.g., insufficient funds, invalid account, duplicate transaction)
+  - Typically carry a business error code/message, do not require engineering intervention
+- **Non-Functional Errors (Technical/system errors):**
+  - Infrastructure failures (timeouts, network, service down)
+  - Authentication/authorization failures, data format issues, rate limits, etc.
+
+**Industry Approach:**
+- Use a standard response envelope (often a JSON object) for ALL responses
+- Differentiate errors by type (business vs. technical)
+- Provide explicit error codes, status, and developer-friendly error details
+- Log and monitor all non-functional errors for system health, while business errors may only be audited
+- Standardize exception mapping across layers and protocols using middleware or libraries
+
+---
+
+## Our Adapter Service Solution Architecture
+
+### Design Goals
+- Protocol-agnostic error normalization (REST, SOAP, gRPC, etc.)
+- Unified error and success response JSON for all microservices
+- Two-layered exception handling:
+  1. Protocol-specific error capturer & mapper in Adapter Service
+  2. Microservice-facing common ExceptionAdvisor for further microservice error handling
+- Extensible for new protocols and business rules
+- Fully integrated with resilience features (retry, circuit breaker, timeouts)
+
+---
+
+## Response & Exception Handling Layers
+
+### 1. **Protocol-Level Error Capturing & Mapping (Adapter Service Layer)**
+
+**Responsibilities:**
+- Capture all downstream errors (HTTP status, SOAP faults, gRPC status, Kafka errors etc.)
+- Map protocol-specific errors to internal error categories (BUSINESS, TECHNICAL, VALIDATION, etc.)
+- Extract error details (code, message, severity, retryable) and wrap as Adapter-standard error objects
+- Include rich context (downstream status codes, fault codes, additional fields)
+- Use a modular error-mapping component for each protocol
+
+**Example:**
+```java
+// Pseudocode for error mapping
+if (protocol == REST) {
+    if (response.status == 400) -> map to "INVALID_REQUEST_FORMAT" (Business)
+    if (response.status == 500) -> map to "SERVICE_UNAVAILABLE" (Technical)
+    ...
+} else if (protocol == SOAP) {
+    if (fault.code == "Client") -> map to "BUSINESS_RULE_VIOLATION"
+    if (fault.code == "Server") -> map to "EXTERNAL_SERVICE_ERROR"
+    ...
+}
+// Populate ErrorDetails (code, message, type, original details)
+```
+
+### 2. **Adapter StandardResponse Creation & Exposure**
+
+**Responsibilities:**
+- All protocol and system outcomes (successes and errors) are wrapped in a `StandardResponse<T>`
+- Success:
+  - `success: true`, `payload: ...`, `status: SUCCESS`, `error: null`
+- Error (business or technical):
+  - `success: false`, `payload: null`, `status: ERROR/BUSINESS_ERROR/TECHNICAL_ERROR`,
+    `error: { errorCode, errorMessage, category, severity, downstreamDetails, retryable }`
+- Add context: `correlationId`, `serviceName`, timestamp, protocol, performance, etc.
+- Surface only whitelisted fields to consumers, rest for audit/logging
+
+**Example JSON:**
+```json
+// Success
+{
+  "success": true,
+  "payload": { ... },
+  "status": "SUCCESS",
+  "correlationId": "abc123",
+  "timestamp": "2025-09-19T09:45:00Z"
+  "oprStatus": "",
+  "returnCode": 0
+}
+
+// Business Error
+{
+  "success": false,
+  "status": "BUSINESS_ERROR",
+  "error": {
+    "errorCode": "INSUFFICIENT_FUNDS",
+    "errorMessage": "Your account has insufficient balance.",
+    "category": "BUSINESS",
+    "severity": "MEDIUM"
+  },
+  "correlationId": "abc123",
+  "timestamp": "2025-09-19T09:45:01Z",
+  "oprStatus": "",
+  "returnCode": 0
+}
+
+// Technical Error
+{
+  "success": false,
+  "status": "TECHNICAL_ERROR",
+  "error": {
+    "errorCode": "SERVICE_UNAVAILABLE",
+    "errorMessage": "Downstream payment gateway not responding.",
+    "category": "TECHNICAL",
+    "severity": "HIGH",
+    "downstreamService": "payment_gateway",
+    "httpStatusCode": 504
+  },
+  "correlationId": "abc123",
+  "timestamp": "2025-09-19T09:45:02Z",
+  "oprStatus": "",
+  "returnCode": 0
+}
+```
+
+### 3. **Microservice Layer  Common Exception Advisor**
+
+**Responsibilities:**
+- Microservices consume only StandardResponse from Adapter Service
+- Use a `@ControllerAdvice` (or equivalent) to intercept all exceptions
+- Inspect the StandardResponse:
+  - If `success: false`, extract error and throw business/technical exceptions as needed
+  - Map to HTTP codes (e.g., 400 for validation, 503 for technical failure)
+- Developers can use the error/category fields to decide whether to retry or return messages to end-users
+- All thrown exceptions can be logged using a standard logging pattern
+
+**Sample Spring Boot ControllerAdvice:**
+```java
+@RestControllerAdvice
+public class AdapterExceptionAdvisor {
+    @ExceptionHandler(AdapterBusinessException.class)
+    public ResponseEntity<AdapterErrorView> handleBusiness(AdapterBusinessException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(AdapterErrorView.of(ex));
+    }
+    @ExceptionHandler(AdapterTechnicalException.class)
+    public ResponseEntity<AdapterErrorView> handleTech(AdapterTechnicalException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(AdapterErrorView.of(ex));
+    }
+    // ...
+}
+```
+
+---
+
+## Detailed Error Capture & Delivery: Two-Layered Approach
+
+### 1. **Protocol-Specific Capture & Mapping (Adapter Internals)**
+- Each protocol module (REST/SOAP/gRPC/Kafka/DB) has its own error handler/mapper
+- All downstream response codes/faults/errors are captured
+- Each is mapped to a common ErrorDetails structure via protocol-to-adapter mapping
+- Reconciliation of custom codes/messages to standardized ones using mapping config/resources
+
+### 2. **Adapter StandardResponse Assembly**
+- After mapping, build a `StandardResponse` with all relevant fields
+- Optionally add context fields (retryable, correlationId, performance...) as needed by microservices
+- Only publish safe-for-client fields in response; retain verbose logs for support/audit only
+
+---
+
+## Microservice Consumption & Further Error Handling
+
+### Usage Guidelines
+- Always process the StandardResponse for both errors and success
+- For errors:
+  - Use error code and category to branch logic (show messages, trigger retry, etc.)
+  - Use severity/category to decide escalation or fallback
+- Throw microservice-specific exceptions as required, optionally using Adapter-provided ExceptionAdvisor for uniformity
+- Log ALL errors for audit; tag logs with correlationId for cross-service traceability
+
+### API Layer Example
+```java
+@PostMapping("/transfer")
+public ResponseEntity<?> transfer(@RequestBody TransferRequest req) {
+    StandardResponse<?> resp = paymentAdapterClient.invoke("payment_gateway", req);
+    if (!resp.isSuccess()) {
+        // Can map category to 4xx/5xx
+        if (resp.getError().getCategory() == ErrorCategory.BUSINESS) {
+            throw new AdapterBusinessException(resp.getError());
+        } else {
+            throw new AdapterTechnicalException(resp.getError());
+        }
+    }
+    return ResponseEntity.ok(resp.getPayload());
+}
+```
+
+---
+
+## Advantages & Why This Matters
+- All microservices receive unified, protocol-agnostic JSON responses
+- Error mapping logic stays in adapter (not duplicated everywhere)
+- Easy to add new protocols and downstream services
+- Audit/logging and correlation is built-in
+- Fully compatible with industry microservice resilience patterns (retry, circuit breaker, etc.)
+- Makes future error-handling automation, client-facing error messages, and analytics simpler
+
+---
+
+## Summary Table
+| Layer                | Responsibility                                      | Implementation                 |
+|----------------------|-----------------------------------------------------|--------------------------------|
+| Protocol Handler     | Capture, map, and translate downstream exceptions   | Per-protocol error mappers     |
+| Adapter Response     | Standardize into JSON StandardResponse              | StandardResponse/ErrorDetails  |
+| Microservice Advisor | Handle/throw based on unified domain model          | @ControllerAdvice, custom advisor |
+| Logging/Audit        | End-to-end error trace by correlation ID            | Structured logging, MDC        |
+
+---
+
+## Conclusion
+This approach ensures visible, actionable, and developer-friendly error handling in a large-scale, multi-protocol, multi-service landscape. With layered exception mapping and a standard response, your microservices are robust, maintainable, and able to evolve with minimal coupling to downstream technology specifics.
+
+---
+
+*Update this documentation as new protocols, error classifiers, or business rule engines are adopted.*
