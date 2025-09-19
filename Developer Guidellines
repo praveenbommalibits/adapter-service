@@ -1,0 +1,552 @@
+h1. ADCB Microservices Developer Guidelines
+h2. Document Overview
+
+h3. Purpose
+This comprehensive guide establishes development standards for ADCB's microservices transformation initiative, covering all aspects from repository management to production deployment.
+
+h3. Scope
+Applies to all backend services, shared libraries, and infrastructure components developed by 50+ developers across multiple teams.
+
+h3. Target Audience
+Software developers, tech leads, solution architects, DevOps engineers, and platform teams.
+
+---
+
+h2. 1. GitHub & Version Control Guidelines
+
+h3. 1.1 Repository Management
+h4. Repository Naming Standards
+* **Microservices**: mib-{domain}-{capability}-svc
+  ** Example: customer-profile-svc, payments-statement-svc
+* **Libraries**: mib-{library-name}-lib
+  ** Example: mib-common-utils-lib, mib-security-jwt-lib
+* **Infrastructure**: {component}-infra
+  ** Example: eks-cluster-infra, monitoring-infra
+
+h4. Repository Structure
+All repositories must include:
+* README.md with comprehensive setup instructions
+* LICENSE file (Apache 2.0 or proprietary)
+* .gitignore with Java/Gradle/IntelliJ defaults
+* .editorconfig for consistent formatting
+* CODEOWNERS defining required reviewers
+* .github/pull_request_template.md
+
+h4. Visibility & Access Control
+* Default: Private repositories
+* Internal/public requires architecture team approval
+* Branch protection rules enforced on main/develop
+* Required status checks before merge
+
+h3. 1.2 Branching Strategy
+h4. Branch Model (GitFlow-Lite)
+* **main**: Production-ready code only
+  ** Protected branch requiring 2 approvals
+  ** Automatic deployment to production
+  ** All commits must be signed
+* **develop**: Integration branch
+  ** Protected branch requiring 1 approval
+  ** Continuous integration testing
+  ** Automatic deployment to development environment
+* **Feature branches**: feature/JIRA-{number}-{description}
+  ** Short-lived (max 2 weeks)
+  ** Regular rebase from develop
+* **Bug fixes**: bugfix/JIRA-{number}-{description}
+* **Hotfixes**: hotfix/JIRA-{number}-{description}
+
+h4. Commit Standards
+* Use Conventional Commits format
+  ** feat: new features
+  ** fix: bug fixes
+  ** chore: maintenance tasks
+  ** docs: documentation updates
+* Include Jira ticket reference
+* Descriptive commit messages
+
+h3. 1.3 Pull Request Process
+h4. PR Requirements
+* Title format: [JIRA-123] Brief description
+* Complete PR template checklist
+* Minimum reviewers: 1 for develop, 2 for main
+* All CI checks must pass (build, tests, security)
+* No merge conflicts
+
+h4. Code Review Guidelines
+* Focus on business logic correctness
+* Verify coding standards compliance
+* Check test coverage (minimum 70%)
+* Security review for sensitive changes
+* Performance impact assessment
+
+---
+
+h2. 2. Microservice Development Guidelines
+
+h3. 2.1 Service Design Principles
+h4. Domain-Driven Design
+* Each service represents single bounded context
+* Business capability alignment
+* Independent data ownership
+* Autonomous deployment capability
+
+h4. Service Naming
+* Format: mib-{domain}-{capability}-svc
+* Examples:
+  ** mib-user-registration-svc
+  ** mib-payment-svc
+  ** mib-tech-proxy-svc
+  ** mib-risk-assessment-svc
+
+h3. 2.2 Architecture Patterns
+h4. Hexagonal Architecture
+* **Ports & Adapters pattern implementation**
+* Clear separation of business logic from infrastructure
+* Testable and maintainable code structure
+
+h4. API Design
+* RESTful conventions
+* Base path: /api/v{version}/{resource} //TODO to be concluded 
+* Resource-oriented URLs (nouns, not verbs)
+* Consistent HTTP status codes
+* OpenAPI 3.0 specification mandatory
+
+h3. 2.3 Technology Stack Standards
+h4. Core Technologies
+* Java 21LTS (minimum)
+* Spring Boot 3.5.x
+* Gradle with Kotlin DSL
+* Docker containerization
+
+h4. Database Technologies
+* Primary: PostgreSQL (Amazon Aurora)
+* Legacy: Oracle (migration path defined)
+* Caching: Redis
+* Message Queues: Apache Kafka
+
+---
+
+h2. 3. Java Code Standards
+
+h3. 3.1 Package Structure
+h4. Microservice Package Hierarchy
+{code}
+com.adcb.{domain}.{capability}
+TODO : sampele microservice template will be going to provided
+
+h4. Common Library Package Structure
+{code}
+org.adcb.{library}
+{code}
+
+h3. 3.2 Coding Conventions
+h4. Class Naming
+* UpperCamelCase for classes and interfaces
+* Descriptive names reflecting business purpose
+* Avoid abbreviations and technical jargon
+
+h4. Method Naming
+* lowerCamelCase for methods and variables
+* Verb-noun combinations for methods
+* Boolean methods start with "is", "has", "can"
+
+h4. Constants
+* UPPER_SNAKE_CASE for constants
+* Group related constants in enums or interfaces
+
+---
+
+h2. 4. EditorConfig & Code Formatting
+
+h3. 4.1 Standard .editorconfig
+TODO : refer the attached editorconfig file and READ ME section on the same
+
+h3. 4.2 IDE Integration
+h4. IntelliJ IDEA Setup
+* Enable EditorConfig support
+* Configure "Format on Save"
+* Optimize imports on save
+* Install Checkstyle-IDEA plugin
+
+h3. 4.3 Enforcement
+* Pre-commit hooks for validation
+* CI pipeline fails on formatting violations
+* Spotless Gradle plugin integration
+
+---
+
+h2. 5. Gradle Project Setup
+
+h3. 5.1 Build Script Standards
+h4. Gradle Wrapper
+* Always use Gradle wrapper (./gradlew)
+* Pin to specific Gradle version
+* Commit wrapper files to repository
+
+h4. Kotlin DSL
+* Use build.gradle.kts over Groovy
+* Type-safe build configuration
+* Better IDE support and refactoring
+
+h3. 5.2 Project Structure
+h4. Multi-Module Projects
+{code}
+project-root/
+â”œâ”€â”€ gradle/ (wrapper files)
+â”œâ”€â”€ src/main/java/ (source code)
+â”œâ”€â”€ src/test/java/ (test code)
+â”œâ”€â”€ build.gradle.kts
+â”œâ”€â”€ settings.gradle.kts
+â”œâ”€â”€ gradle.properties
+â””â”€â”€ README.md
+{code}
+
+h3. 5.3 Plugin Configuration
+h4. Standard Plugins
+* Spring Boot plugin
+* Spring Dependency Management
+* Spotless (code formatting)
+* JaCoCo (test coverage)
+* Docker plugin
+
+h4. Quality Gates
+* Minimum 70% test coverage
+* Zero high-severity Spotbugs issues
+* Checkstyle compliance
+* Security vulnerability scanning
+
+---
+
+h2. 6. Dependency Management & BOM
+
+h3. 6.1 BOM Strategy
+h4. Central BOM Repository
+* Repository: mib-dependencies-bom
+* Manages all dependency versions
+* Published to GitHub Packages
+* Quarterly release cycle
+
+h4. BOM Structure
+{code}
+org.adcb:adcb-dependencies-bom:2024.4.0
+â”œâ”€â”€ Spring Boot (managed versions)
+â”œâ”€â”€ Spring Cloud (managed versions)
+â”œâ”€â”€ Database drivers
+â”œâ”€â”€ Testing frameworks
+â”œâ”€â”€ Security libraries
+â””â”€â”€ ADCB internal libraries
+{code}
+
+h3. 6.2 BOM Usage
+h4. In Microservices
+{code}
+dependencyManagement {
+    imports {
+        mavenBom("org.adcb:adcb-dependencies-bom:2024.4.0")
+    }
+}
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    // No version needed - managed by BOM
+}
+{code}
+
+h3. 6.3 BOM Governance
+h4. Version Management
+* Platform team maintains BOM
+* Security updates prioritized
+* Breaking change communication process
+* Migration guides for major updates
+
+h4. Approval Process
+* New dependencies require architecture review
+* Version updates tested in staging environment
+* Impact assessment for breaking changes
+
+---
+
+h2. 7. Common Library Development
+
+h3. 7.1 Library Categories
+h4. Utility Libraries
+* **adcb-common-utils-lib**: General utilities
+* **adcb-validation-lib**: Business validation rules
+* **adcb-encryption-lib**: Encryption/decryption utilities
+
+h4. Integration Libraries  
+* **adcb-kafka-lib**: Messaging abstractions
+* **adcb-rest-client-lib**: HTTP client utilities
+* **adcb-database-lib**: Database access patterns
+
+h4. Security Libraries
+* **mib-jwt-lib**: JWT token handling
+* **mib-audit-lib**: Audit logging
+* **mib-oauth-lib**: OAuth integration
+
+h3. 7.2 Library Development Standards
+h4. API Design
+* Minimal and focused APIs
+* Backward compatibility guaranteed
+* Clear separation of public/internal APIs
+* Auto-configuration for Spring Boot integration
+
+h4. Documentation Requirements
+* Comprehensive README with examples
+* JavaDoc for all public APIs
+* Migration guides for version updates
+* Sample projects demonstrating usage
+
+h3. 7.3 Library Release Process
+h4. Versioning Strategy
+* Semantic versioning (MAJOR.MINOR.PATCH)
+* Pre-release versions for testing
+* Long-term support for major versions
+
+h4. Publishing Pipeline
+* Automated testing on multiple environments
+* Security scanning and vulnerability assessment
+* Publication to GitHub Packages
+* Update BOM with new versions
+
+---
+
+h2. 8. Documentation Standards
+
+h3. 8.1 Code Documentation
+h4. JavaDoc Requirements
+* All public classes and methods documented
+* Include @param, @return, @throws annotations
+* Business context and usage examples
+* @since tags for version tracking
+
+h4. Documentation Template
+{code:java}
+/**
+ * Service for managing customer banking profiles.
+ * 
+ * Handles customer creation, updates, and retrieval
+ * according to ADCB business rules.
+ * 
+ * @author Development Team
+ * @version 1.2.0
+ * @since 2024-01-15
+ */
+public class CustomerProfileService {
+    /**
+     * Creates new customer with validation.
+     * 
+     * @param request Customer creation data
+     * @return Created customer with assigned ID
+     * @throws ValidationException if data invalid
+     * @since 1.0.0
+     */
+    public Customer createCustomer(CreateCustomerRequest request) {
+        // Implementation
+    }
+}
+{code}
+
+h3. 8.2 Repository Documentation
+h4. README Structure
+* Project overview and purpose
+* Technology stack and dependencies
+* Setup and configuration instructions
+* API documentation links
+* Testing guidelines
+* Deployment instructions
+* Contributing guidelines
+* Support and contact information
+
+h4. Architecture Decision Records (ADRs)
+* Store in docs/adr/ directory
+* Document significant architectural decisions
+* Include context, decision, and consequences
+* Number sequentially (001-decision-title.md)
+
+h3. 8.3 API Documentation
+h4. OpenAPI Specifications
+* Generate from code annotations
+* Publish to internal developer portal
+* Include examples and use cases
+* Version alongside service releases
+
+---
+
+h2. 9. CI/CD Pipeline Standards
+
+h3. 9.1 Build Pipeline
+h4. Pipeline Stages
+* **Compile**: Gradle clean build
+* **Test**: Unit and integration tests
+* **Quality**: SonarQube analysis, Spotbugs
+* **Security**: Trivy vulnerability scanning
+* **Package**: Docker image creation
+* **Publish**: Artifact publication
+
+h4. Quality Gates
+* Test coverage â‰¥ 70%
+* Zero critical security vulnerabilities
+* Code duplication < 10%
+* Technical debt ratio < 5%
+
+h3. 9.2 Deployment Pipeline
+h4. Environment Progression
+* **Development**: Automatic deployment on develop merge
+* **Staging**: Manual promotion with approval
+* **Production**: Manual deployment with dual approval
+
+h4. Deployment Strategy
+* Blue-green deployment for zero downtime
+* Canary releases for high-risk changes
+* Automated rollback on health check failures
+
+h3. 9.3 Infrastructure as Code
+h4. Kubernetes Manifests
+* Helm charts for all services
+* Environment-specific values files
+* Resource limits and requests defined
+* Health checks and probes configured
+
+h4. GitOps Workflow
+* ArgoCD for automated deployment
+* Separate config repositories
+* Declarative infrastructure management
+
+---
+
+h2. 10. Security & Compliance
+
+h3. 10.1 Secrets Management
+h4. No Secrets in Code
+* Use AWS Secrets Manager
+* Environment variables for configuration
+* Pre-commit hooks to prevent secrets
+* Regular secret rotation
+
+h4. Access Control
+* IAM roles for service accounts (IRSA)
+* Principle of least privilege
+* Regular access reviews
+
+h3. 10.2 Security Scanning
+h4. Automated Security Checks
+* Dependency vulnerability scanning
+* Container image scanning
+* Static code analysis (SonarQube)
+* Dynamic security testing
+
+h3. 10.3 Compliance Requirements
+h4. Audit Logging
+* All business operations logged
+* Structured JSON logging format
+* Correlation IDs for tracing
+* Secure log storage and retention
+
+---
+
+h2. 11. Monitoring & Observability
+
+h3. 11.1 Logging Standards
+h4. Structured Logging
+* JSON format for all logs
+* Standard fields: timestamp, level, service, correlation-id
+* Business event logging
+* Error and exception logging
+
+h3. 11.2 Metrics Collection
+h4. Application Metrics
+* JVM metrics (heap, GC, threads)
+* Business metrics (transactions, errors)
+* Custom metrics for key operations
+* Prometheus format export
+
+h3. 11.3 Distributed Tracing
+h4. OpenTelemetry Integration
+* Trace context propagation
+* Service dependency mapping
+* Performance bottleneck identification
+
+---
+
+h2. 12. Testing Guidelines
+
+h3. 12.1 Testing Strategy
+h4. Test Pyramid
+* **Unit Tests**: 70% of total tests
+* **Integration Tests**: 20% of total tests  
+* **End-to-End Tests**: 10% of total tests
+
+h4. Testing Frameworks
+* JUnit 5 for unit testing
+* TestContainers for integration testing
+* MockWebServer for external service mocking
+* WireMock for API contract testing
+
+h3. 12.2 Test Organization
+h4. Test Structure
+* Follow same package structure as main code
+* Separate test utilities and fixtures
+* Shared test configuration in test resources
+
+h4. Test Data Management
+* Test-specific databases
+* Data cleanup after tests
+* Repeatable and isolated tests
+
+---
+
+h2. 13. Performance & Scalability
+
+h3. 13.1 Performance Standards
+h4. Response Time Targets
+* API response time < 500ms (95th percentile)
+* Database query time < 100ms
+* External service calls < 2 seconds
+
+h4. Throughput Requirements
+* Handle 1000 requests per second per service
+* Scale horizontally based on load
+* Circuit breakers for fault tolerance
+
+h3. 13.2 Resource Management
+h4. JVM Configuration
+* Appropriate heap size settings
+* GC tuning for low latency
+* Connection pool optimization
+
+h4. Database Optimization
+* Proper indexing strategy
+* Query performance monitoring
+* Connection pool sizing
+
+---
+
+h2. Appendices
+
+h3. Appendix A: Tool Recommendations
+h4. Development Tools
+* IntelliJ IDEA Ultimate (preferred)
+* Docker Desktop
+* Postman for API testing
+* DBeaver for database management
+
+h4. CLI Tools
+* kubectl for Kubernetes management
+* eksctl for EKS operations
+* Helm for package management
+* AWS CLI for cloud operations
+
+h3. Appendix B: Reference Links
+h4. Internal Resources
+* ADCB Developer Portal: [internal-link]
+* GitHub Organization: [github-link]
+* Confluence Space: [confluence-link]
+* Slack Channels: #microservices-dev
+
+h4. External Resources
+* Spring Boot Documentation
+* Kubernetes Documentation
+* Docker Best Practices
+* AWS EKS User Guide
+
+---
