@@ -26,6 +26,11 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
 
+    // https://mvnrepository.com/artifact/io.github.resilience4j/resilience4j-circuitbreaker
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.3.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.1.0")
+
+
     // Spring Boot Configuration Processor for @ConfigurationProperties
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 

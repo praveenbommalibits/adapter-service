@@ -12,6 +12,10 @@ import java.util.Map;
 
 /**
  * Transforms SOAP/XML responses using XPath and converts to JSON.
+ * After receiving the downstream response as a raw string:
+ * 	•	For JSON, use `JsonResponseTransformer.toMap()` → yield a `Map<String,Object>`.
+ * 	•	For XML or SOAP, use `XmlJsonUtil.convertXmlToMap()` or `XmlResponseTransformer.toJsonMap()`.
+ * 	•	Pass the map into your template engine if you need to apply a response template, or directly wrap it in `StandardResponse`.
  */
 @Slf4j
 public class XmlResponseTransformer {

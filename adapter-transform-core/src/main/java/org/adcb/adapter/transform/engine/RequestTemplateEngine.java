@@ -11,6 +11,11 @@ import java.util.Map;
 
 /**
  * Renders request templates using Freemarker (supports both JSON and XML).
+ * `RequestTemplateEngine` uses a `StringTemplateLoader` to compile each template string on the fly.
+ * 	•	This supports both JSON and XML templates, with nested map/list substitutions, conditionals, etc.
+ * 	•	A future enhancement can add `TemplateCache` to avoid recompiling templates every invocation.
+ * TODO : In future enhancement can add TemplateCache to avoid recompiling templates every invocation
+ *
  */
 public class RequestTemplateEngine {
 

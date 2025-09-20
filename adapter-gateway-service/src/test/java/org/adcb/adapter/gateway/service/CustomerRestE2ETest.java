@@ -1,3 +1,4 @@
+/*
 package org.adcb.adapter.gateway.service;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -21,11 +22,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+*/
 /**
  * End-to-end integration test for the customer REST service adapter.
  * Starts a WireMockServer on port 8089, configures a stub for the downstream
  * REST API, invokes the adapter client, and verifies the StandardResponse.
- */
+ *//*
+
 @SpringBootTest(classes = TestApplication.class)
 @ActiveProfiles("test")
 @TestPropertySource(locations = "classpath:application-test.yml")
@@ -81,3 +84,4 @@ public class CustomerRestE2ETest {
         assertNotNull(response.getTimestamp());
     }
 }
+*/

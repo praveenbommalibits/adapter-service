@@ -1,24 +1,36 @@
 package org.adcb.adapter.commons;
 
 import lombok.Data;
+import org.adcb.adapter.commons.auth.AuthConfig;
+import org.adcb.adapter.commons.resilience.ResilienceConfig;
+
 import java.util.Map;
 
+/**
+ * Holds all configuration for a downstream service, including auth, resilience, templates, etc.
+ */
 @Data
 public class ServiceMetadata {
-    // Existing fields
+    // Core settings
     private String serviceName;
     private String protocol;
+    private String endpointUrl;
     private String requestTemplate;
     private String responseTemplate;
-    private String endpointUrl;
     private String httpMethod;
     private Map<String, String> headers;
 
-    // New fields for SOAP error extraction
+    // Authentication settings
+    private AuthConfig auth;
+
+    // Resilience settings
+    private ResilienceConfig resilience;
+
+    // SOAP error extraction
     private String errorCodeXPath;
     private String errorDescriptionXPath;
 
-    // Runtime status fields (to be set by handlers/gateway)
+    // Runtime fields
     private Integer lastHttpStatus;
     private String lastErrorDescription;
 }

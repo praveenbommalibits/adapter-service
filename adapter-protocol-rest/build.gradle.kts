@@ -16,6 +16,7 @@ repositories {
 dependencies {
     implementation(project(":adapter-spi"))
     implementation(project(":adapter-commons"))
+    implementation(project(":adapter-transform-core"))
 
     implementation("org.springframework.boot:spring-boot-starter-webflux") // For WebClient
     implementation("com.fasterxml.jackson.core:jackson-databind")

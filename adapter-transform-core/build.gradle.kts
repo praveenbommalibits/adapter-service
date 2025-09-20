@@ -1,5 +1,5 @@
 plugins {
-    id("java-library")
+    `java-library`
 }
 
 group = "org.adcb.adapter"
@@ -18,6 +18,10 @@ dependencies {
     implementation(project(":adapter-commons"))
     implementation(project(":adapter-spi"))
 
+    implementation("org.springframework.boot:spring-boot-starter-webflux:3.5.5") // For WebClient
+    implementation("org.springframework.boot:spring-boot-starter:3.5.5")
+    implementation("org.springframework:spring-context:6.1.0")
+
     // JSON template and path extraction
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0")
     implementation("com.jayway.jsonpath:json-path:2.8.0")
@@ -27,6 +31,7 @@ dependencies {
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.0")
     implementation("org.glassfish.jaxb:jaxb-runtime:4.0.4")
     //implementation("javax.xml.xpath:jaxp-api:1.4.0")
+    implementation("jakarta.annotation:jakarta.annotation-api:2.1.1")
 
     compileOnly("org.projectlombok:lombok:1.18.30")
     implementation("org.projectlombok:lombok:1.18.30")
