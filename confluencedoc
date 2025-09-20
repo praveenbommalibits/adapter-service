@@ -1,0 +1,1760 @@
+# ADCB Adapter Platform - Technical Documentation
+
+---
+
+## Table of Contents
+
+1. [Project Introduction](#project-introduction)
+2. [Architecture Overview](#architecture-overview)
+3. [Module Structure & Details](#module-structure--details)
+4. [Authentication Layer](#authentication-layer)
+5. [Protocol Handling](#protocol-handling)
+6. [Transformation Layer](#transformation-layer)
+7. [Build & Release Automation](#build--release-automation)
+8. [Integration Guide for Developers](#integration-guide-for-developers)
+9. [End-to-End Workflow Example](#end-to-end-workflow-example)
+10. [Advanced Configuration](#advanced-configuration)
+11. [Testing Framework](#testing-framework)
+12. [Troubleshooting](#troubleshooting)
+13. [References & Support](#references--support)
+
+---
+
+## Project Introduction
+
+The **ADCB Adapter Platform** is a comprehensive, modular integration framework designed to streamline interactions between microservices and external systems. It provides a unified API layer that abstracts complex protocol handling, authentication, transformation, and orchestration logic.
+
+### Key Features
+
+- **Protocol Agnostic**: Supports REST, Proxy, with extensible architecture for SOAP, gRPC
+- **Transformation Engine**: Built-in request/response transformation using templates
+- **Authentication Management**: Configurable authentication strategies (API Key, OAuth, JWT)
+- **Configuration-Driven**: Zero-code configuration for new service integrations
+- **Cloud-Native**: Spring Boot based, container-ready with CI/CD automation
+- **GitHub Packages**: Automated publishing for organization-wide reuse
+
+### Business Value
+
+- **Reduced Development Time**: Standard integration patterns eliminate boilerplate
+- **Consistency**: Unified approach to external service interactions
+- **Maintainability**: Centralized configuration and error handling
+- **Scalability**: Modular architecture supports growth and new protocols
+- **Security**: Built-in authentication and credential management
+
+---
+
+## Architecture Overview
+
+### High-Level Architecture
+
+
+### Component Interaction Flow
+
+1. **Request Initiation**: Microservice calls `AdapterGatewayClient.invoke()`
+2. **Configuration Lookup**: Gateway reads service configuration from YAML
+3. **Protocol Selection**: Appropriate protocol handler is selected and invoked
+4. **Authentication**: Handler applies configured authentication strategy
+5. **Transformation**: Request is transformed using configured templates
+6. **External Call**: Protocol handler executes the external service call
+7. **Response Processing**: Response is transformed and standardized
+8. **Result Return**: Standardized response returned to calling microservice
+
+---
+
+## Module Structure & Details
+
+### Overview Table
+
+| Module Name | Published | Purpose | Consumer Usage |
+|------------|-----------|---------|----------------|
+| adapter-client-starter | âœ… | Main entry point for microservices | Primary dependency |
+| adapter-commons | âœ… | Shared DTOs, models, utilities | Optional direct usage |
+| adapter-transform-core | âœ… | Transformation engine | Optional for advanced use |
+| adapter-gateway-service | âŒ | Internal orchestration | Internal only |
+| adapter-spi | âŒ | Protocol handler interfaces | Extension development |
+| adapter-protocol-rest | âŒ | REST protocol implementation | Internal only |
+| adapter-protocol-proxy | âŒ | Proxy protocol implementation | Internal only |
+
+### Detailed Module Descriptions
+
+#### adapter-client-starter
+
+**Purpose**: Primary integration point for all consuming microservices.
+
+**Key Components**:
+- `AdapterGatewayClient`: Main service interface
+- Auto-configuration for Spring Boot integration
+- Dependency management for all required modules
+
+**Usage Pattern**:
+```java
+@Autowired
+private AdapterGatewayClient client;
+
+public ResponseEntity<?> callExternalService(RequestData data) {
+    StandardResponse<?> response = client.invoke("external_service", data);
+    return ResponseEntity.ok(response.getPayload());
+}
+```
+
+**Dependencies**: Transitively includes all necessary modules
+- adapter-commons (shared models)
+- adapter-transform-core (transformation)
+- adapter-gateway-service (orchestration)
+- All protocol handlers
+
+#### adapter-gateway-service
+
+**Purpose**: Central orchestration engine that coordinates all service interactions.
+
+**Key Responsibilities**:
+- Service configuration management
+- Protocol handler selection and invocation
+- Error handling and standardization
+- Metrics and logging coordination
+
+**Core Classes**:
+- `ProtocolAdapterService`: Main orchestration logic
+- `ServiceConfig`: Configuration binding and management
+- `ResponseTransformer`: Standard response formatting
+
+**Configuration Binding**:
+```yaml
+adapter:
+  templates:
+    path: /etc/adapter/templates
+  services:
+    customer_service:
+      protocol: REST_JSON
+      endpointUrl: https://api.example.com/customers
+      httpMethod: POST
+      requestTemplate: customer_request.json
+      responseTemplate: customer_response.json
+```
+
+#### adapter-protocol-rest
+
+**Purpose**: Handles REST-based external service integrations.
+
+**Implementation Details**:
+- Uses Spring WebFlux `WebClient` for non-blocking calls
+- Supports all HTTP methods (GET, POST, PUT, DELETE, PATCH)
+- Configurable timeout and retry policies
+- Request/response logging and metrics
+
+**Key Features**:
+- Template-based request construction
+- Automatic content-type handling
+- Error response mapping
+- Connection pooling and management
+
+#### adapter-protocol-proxy
+
+**Purpose**: Implements proxy-pass functionality for direct service forwarding.
+
+**Use Cases**:
+- Legacy system integration where minimal transformation is needed
+- High-performance scenarios requiring direct pass-through
+- Gradual migration scenarios
+
+**Implementation**:
+- Direct request forwarding with minimal overhead
+- Header preservation and manipulation
+- URL rewriting capabilities
+- Authentication injection
+
+#### adapter-transform-core
+
+**Purpose**: Provides template-based request/response transformation capabilities.
+
+**Transformation Features**:
+- JSON template processing with variable substitution
+- Conditional logic support in templates
+- Nested object transformation
+- Array/collection handling
+- Data type conversion
+
+**Template Example**:
+```json
+{
+  "customerId": "${customerId}",
+  "requestTime": "${timestamp}",
+  "data": {
+    "account": "${account.number}",
+    "balance": "${account.balance}"
+  }
+}
+```
+
+#### adapter-commons
+
+**Purpose**: Shared data transfer objects, utility classes, and common functionality.
+
+**Key Components**:
+- `StandardResponse<T>`: Unified response wrapper
+- `ServiceMetadata`: Service configuration model
+- Error codes and exception classes
+- Utility functions for data conversion
+
+**StandardResponse Structure**:
+```java
+public class StandardResponse<T> {
+    private boolean success;
+    private String errorCode;
+    private String errorDescription;
+    private T payload;
+    private String correlationId;
+    private LocalDateTime timestamp;
+}
+```
+
+#### adapter-spi
+
+**Purpose**: Service Provider Interface for extending protocol support.
+
+**Extension Points**:
+- `ProtocolHandler`: Interface for new protocol implementations
+- Authentication strategy interfaces
+- Transformation extension points
+
+**Creating Custom Protocol Handler**:
+```java
+@Component("CUSTOM_PROTOCOL")
+public class CustomProtocolHandler implements ProtocolHandler {
+    @Override
+    public Object execute(ServiceMetadata config, Object requestBody) {
+        // Custom protocol implementation
+        return processCustomRequest(config, requestBody);
+    }
+}
+```
+
+---
+
+## Authentication Layer
+
+### Supported Authentication Methods
+
+#### API Key Authentication
+- **Header-based**: `X-API-Key: {token}`
+- **Query parameter**: `?api_key={token}`
+- **Custom header names supported**
+
+#### OAuth 2.0 / JWT Token
+- **Bearer token**: `Authorization: Bearer {token}`
+- **Token refresh capabilities**
+- **Scope-based access control**
+
+#### Basic Authentication
+- **Username/password encoding**
+- **Credential vault integration**
+
+### Configuration Examples
+
+```yaml
+adapter:
+  services:
+    secure_service:
+      protocol: REST_JSON
+      endpointUrl: https://secure-api.com/data
+      authentication:
+        type: API_KEY
+        headerName: X-API-Key
+        tokenSource: ${SECURE_API_TOKEN}
+```
+
+```yaml
+adapter:
+  services:
+    oauth_service:
+      protocol: REST_JSON
+      endpointUrl: https://oauth-api.com/resource
+      authentication:
+        type: OAUTH2
+        tokenEndpoint: https://auth.com/token
+        clientId: ${CLIENT_ID}
+        clientSecret: ${CLIENT_SECRET}
+        scope: read,write
+```
+
+### Security Best Practices
+
+1. **Never hardcode credentials** in configuration files
+2. **Use environment variables** or secret management systems
+3. **Implement token refresh** for long-running services
+4. **Log authentication attempts** for audit trails
+5. **Validate token expiration** before making calls
+
+---
+
+## Protocol Handling
+
+### Protocol Selection Mechanism
+
+The gateway uses a **configuration-driven approach** to select the appropriate protocol handler:
+
+```yaml
+adapter:
+  services:
+    rest_service:
+      protocol: REST_JSON    # Selects RestJsonProtocolHandler
+    proxy_service:
+      protocol: PROXY_PASS   # Selects ProxyPassProtocolHandler
+```
+
+### REST Protocol Handler
+
+**Capabilities**:
+- Full HTTP method support (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+- Content-Type handling (JSON, XML, Form-data, Text)
+- Custom header management
+- Query parameter construction
+- Request/response body transformation
+
+**Configuration Options**:
+```yaml
+rest_service:
+  protocol: REST_JSON
+  endpointUrl: https://api.example.com/resource
+  httpMethod: POST
+  headers:
+    Content-Type: application/json
+    Accept: application/json
+    X-Custom-Header: custom-value
+  timeout: 30000  # milliseconds
+  retryAttempts: 3
+```
+
+### Proxy Protocol Handler
+
+**Use Cases**:
+- **API Gateway scenarios**: Route requests to different backend services
+- **Load balancing**: Distribute requests across multiple endpoints
+- **Legacy integration**: Minimal transformation for existing systems
+
+**Configuration**:
+```yaml
+proxy_service:
+  protocol: PROXY_PASS
+  endpointUrl: https://legacy-system.com
+  preserveHeaders: true
+  addHeaders:
+    X-Forwarded-By: adapter-platform
+```
+
+### Extension Mechanism
+
+**Adding New Protocol Handlers**:
+
+1. **Implement the SPI interface**:
+```java
+@Component("GRPC_HANDLER")
+public class GrpcProtocolHandler implements ProtocolHandler {
+    @Override
+    public Object execute(ServiceMetadata config, Object requestBody) {
+        // GRPC-specific implementation
+    }
+}
+```
+
+2. **Configure the new protocol**:
+```yaml
+grpc_service:
+  protocol: GRPC_HANDLER
+  endpointUrl: grpc://service.com:9090
+```
+
+---
+
+## Transformation Layer
+
+### Template Engine Features
+
+The transformation layer uses a **powerful template engine** that supports:
+
+- **Variable substitution**: `${variableName}`
+- **Nested object access**: `${user.profile.email}`
+- **Array/list processing**: `${items[0].name}`
+- **Conditional logic**: `${condition ? value1 : value2}`
+- **Default values**: `${optional_field || 'default'}`
+- **Data formatting**: `${timestamp | formatDate('yyyy-MM-dd')}`
+
+### Request Transformation
+
+**Template Structure** (`customer_request.json`):
+```json
+{
+  "customerId": "${customerId}",
+  "requestId": "${correlationId}",
+  "timestamp": "${currentTimestamp}",
+  "customerData": {
+    "name": "${customer.fullName}",
+    "email": "${customer.email}",
+    "phone": "${customer.phone || 'N/A'}",
+    "addresses": [
+      {
+        "type": "PRIMARY",
+        "street": "${customer.address.street}",
+        "city": "${customer.address.city}",
+        "country": "${customer.address.country || 'AE'}"
+      }
+    ]
+  },
+  "metadata": {
+    "source": "ADCB_ADAPTER",
+    "version": "1.0"
+  }
+}
+```
+
+**Input Data**:
+```java
+Map<String, Object> input = Map.of(
+    "customerId", "12345",
+    "customer", Map.of(
+        "fullName", "Ahmed Al Mansouri",
+        "email", "ahmed@example.com",
+        "address", Map.of(
+            "street", "Sheikh Zayed Road",
+            "city", "Dubai"
+        )
+    )
+);
+```
+
+**Resulting Request**:
+```json
+{
+  "customerId": "12345",
+  "requestId": "uuid-generated",
+  "timestamp": "2025-09-16T08:52:00Z",
+  "customerData": {
+    "name": "Ahmed Al Mansouri",
+    "email": "ahmed@example.com",
+    "phone": "N/A",
+    "addresses": [
+      {
+        "type": "PRIMARY",
+        "street": "Sheikh Zayed Road",
+        "city": "Dubai",
+        "country": "AE"
+      }
+    ]
+  },
+  "metadata": {
+    "source": "ADCB_ADAPTER",
+    "version": "1.0"
+  }
+}
+```
+
+### Response Transformation
+
+**Template Structure** (`customer_response.json`):
+```json
+{
+  "success": true,
+  "data": {
+    "customerId": "${response.id}",
+    "status": "${response.status}",
+    "profile": {
+      "name": "${response.customer.name}",
+      "verified": "${response.customer.isVerified}",
+      "accountType": "${response.customer.type || 'STANDARD'}"
+    }
+  }
+}
+```
+
+### Advanced Transformation Features
+
+**Conditional Transformations**:
+```json
+{
+  "accountStatus": "${balance > 1000 ? 'PREMIUM' : 'STANDARD'}",
+  "notifications": "${preferences.email ? 'EMAIL' : 'SMS'}",
+  "features": [
+    "${isPremium ? 'PRIORITY_SUPPORT' : null}",
+    "${hasCard ? 'CARD_MANAGEMENT' : null}"
+  ]
+}
+```
+
+**Data Formatting**:
+```json
+{
+  "formattedBalance": "${balance | formatCurrency('AED')}",
+  "lastLogin": "${lastLoginTime | formatDate('dd/MM/yyyy HH:mm')}",
+  "phoneNumber": "${phone | formatPhone('+971')}"
+}
+```
+
+---
+
+## Build & Release Automation
+
+### GitHub Actions Workflow
+
+The platform uses **automated CI/CD** with GitHub Actions for building, testing, and publishing packages.
+
+#### Release Workflow Overview
+
+**Triggers**:
+- Manual workflow dispatch (for planned releases)
+- Git tag push (e.g., `v1.0.0`)
+
+**Jobs**:
+1. **create-release**: Version bumping and tagging
+2. **build-and-publish**: Build, test, and publish to GitHub Packages
+
+#### Workflow Steps Detail
+
+**Version Management**:
+```yaml
+- name: Calculate new version
+  run: |
+    CURRENT=$(grep "version" gradle.properties | cut -d'=' -f2 | sed 's/-SNAPSHOT//')
+    case "${{ github.event.inputs.version_type }}" in
+      major) major=$((major+1)); minor=0; patch=0 ;;
+      minor) minor=$((minor+1)); patch=0 ;;
+      patch) patch=$((patch+1)) ;;
+    esac
+    NEW_VERSION="$major.$minor.$patch"
+    echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+```
+
+**Build Process**:
+```yaml
+- name: Build all modules
+  run: ./gradlew build -x test -Pversion=${{ steps.get_version.outputs.version }}
+
+- name: Run tests
+  run: ./gradlew test -Pversion=${{ steps.get_version.outputs.version }}
+```
+
+**Publishing**:
+```yaml
+- name: Publish to GitHub Packages
+  run: |
+    ./gradlew :adapter-client-starter:publish -Pversion=${{ version }}
+    ./gradlew :adapter-commons:publish -Pversion=${{ version }}
+    ./gradlew :adapter-transform-core:publish -Pversion=${{ version }}
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    GITHUB_ACTOR: ${{ github.actor }}
+```
+
+### Semantic Versioning Strategy
+
+- **Major Version** (x.0.0): Breaking API changes, architectural changes
+- **Minor Version** (1.x.0): New features, new protocol handlers, enhanced functionality
+- **Patch Version** (1.0.x): Bug fixes, performance improvements, security patches
+
+### Package Publishing
+
+**Published Modules**:
+- `org.adcb.adapter:adapter-client-starter:${version}`
+- `org.adcb.adapter:adapter-commons:${version}`
+- `org.adcb.adapter:adapter-transform-core:${version}`
+
+**Package Repository**: GitHub Packages
+- **URL**: `https://maven.pkg.github.com/praveenbommalibits/adapter-service`
+- **Authentication**: GitHub token required
+- **Visibility**: Organization-wide access
+
+---
+
+## Integration Guide for Developers
+
+### Prerequisites
+
+- **Java 21+**
+- **Spring Boot 3.x**
+- **Gradle 8.x** or **Maven 3.8+**
+- **GitHub access** for package repository
+
+### Step 1: Repository Configuration
+
+**For Gradle (settings.gradle.kts)**:
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/praveenbommalibits/adapter-service")
+            credentials {
+                username = findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+                password = findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
+```
+
+**For Maven (pom.xml)**:
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/praveenbommalibits/adapter-service</url>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
+```
+
+### Step 2: Add Dependencies
+
+**Primary Dependency** (includes all necessary modules):
+```kotlin
+dependencies {
+    implementation("org.adcb.adapter:adapter-client-starter:1.0.0")
+}
+```
+
+**For DTOs/Models Only**:
+```kotlin
+dependencies {
+    implementation("org.adcb.adapter:adapter-commons:1.0.0")
+}
+```
+
+### Step 3: Configuration Setup
+
+**Application Configuration** (`application.yml`):
+```yaml
+adapter:
+  templates:
+    path: classpath:/adapter-templates/
+  services:
+    customer_api:
+      protocol: REST_JSON
+      endpointUrl: https://api.adcb.com/customers
+      httpMethod: POST
+      requestTemplate: customer_request.json
+      responseTemplate: customer_response.json
+      authentication:
+        type: API_KEY
+        headerName: X-API-Key
+        tokenSource: ${CUSTOMER_API_TOKEN}
+    
+    payment_service:
+      protocol: REST_JSON
+      endpointUrl: https://payments.adcb.com/v1/transfer
+      httpMethod: POST
+      requestTemplate: payment_request.json
+      authentication:
+        type: OAUTH2
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${PAYMENT_CLIENT_ID}
+        clientSecret: ${PAYMENT_CLIENT_SECRET}
+```
+
+### Step 4: Template Creation
+
+**Create template directory**: `src/main/resources/adapter-templates/`
+
+**Request Template** (`customer_request.json`):
+```json
+{
+  "customerId": "${customerId}",
+  "action": "PROFILE_UPDATE",
+  "data": {
+    "personalInfo": {
+      "firstName": "${firstName}",
+      "lastName": "${lastName}",
+      "email": "${email}",
+      "phone": "${phone}"
+    },
+    "address": {
+      "street": "${address.street}",
+      "city": "${address.city}",
+      "country": "${address.country || 'AE'}"
+    }
+  },
+  "requestMetadata": {
+    "timestamp": "${currentTimestamp}",
+    "source": "MOBILE_APP",
+    "correlationId": "${correlationId}"
+  }
+}
+```
+
+**Response Template** (`customer_response.json`):
+```json
+{
+  "success": "${response.status == 'SUCCESS'}",
+  "customerId": "${response.customerId}",
+  "profile": {
+    "name": "${response.customerData.fullName}",
+    "status": "${response.customerData.accountStatus}",
+    "lastUpdated": "${response.lastModified}"
+  }
+}
+```
+
+### Step 5: Service Implementation
+
+**Simple Usage**:
+```java
+@Service
+public class CustomerService {
+    
+    @Autowired
+    private AdapterGatewayClient adapterClient;
+    
+    public CustomerProfile updateProfile(CustomerUpdateRequest request) {
+        try {
+            Map<String, Object> payload = Map.of(
+                "customerId", request.getCustomerId(),
+                "firstName", request.getFirstName(),
+                "lastName", request.getLastName(),
+                "email", request.getEmail(),
+                "phone", request.getPhone(),
+                "address", request.getAddress()
+            );
+            
+            StandardResponse<?> response = adapterClient.invoke("customer_api", payload);
+            
+            if (response.isSuccess()) {
+                return mapToCustomerProfile(response.getPayload());
+            } else {
+                throw new ServiceException(response.getErrorDescription());
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to update customer profile", e);
+            throw new CustomerUpdateException("Profile update failed", e);
+        }
+    }
+}
+```
+
+**Advanced Usage with Error Handling**:
+```java
+@Service
+public class PaymentService {
+    
+    @Autowired
+    private AdapterGatewayClient adapterClient;
+    
+    public PaymentResponse processPayment(PaymentRequest request) {
+        Map<String, Object> payload = buildPaymentPayload(request);
+        
+        StandardResponse<?> response = adapterClient.invoke("payment_service", payload);
+        
+        return switch (response.getErrorCode()) {
+            case "200", "SUCCESS" -> 
+                PaymentResponse.success(response.getPayload());
+            case "400", "INVALID_REQUEST" -> 
+                PaymentResponse.validationError(response.getErrorDescription());
+            case "401", "UNAUTHORIZED" -> 
+                PaymentResponse.authenticationError();
+            case "403", "INSUFFICIENT_FUNDS" -> 
+                PaymentResponse.insufficientFunds();
+            case "500", "SYSTEM_ERROR" -> 
+                PaymentResponse.systemError(response.getErrorDescription());
+            default -> 
+                PaymentResponse.unknownError(response.getErrorDescription());
+        };
+    }
+    
+    private Map<String, Object> buildPaymentPayload(PaymentRequest request) {
+        return Map.of(
+            "fromAccount", request.getFromAccountId(),
+            "toAccount", request.getToAccountId(),
+            "amount", request.getAmount(),
+            "currency", request.getCurrency(),
+            "reference", request.getReference(),
+            "description", request.getDescription()
+        );
+    }
+}
+```
+
+---
+
+## End-to-End Workflow Example
+
+### Scenario: Customer Profile Update
+
+Let's trace a complete request from a mobile banking app updating a customer's profile.
+
+#### Step 1: Mobile App Request
+```http
+PUT /api/customers/12345/profile
+Content-Type: application/json
+Authorization: Bearer jwt-token
+
+{
+  "firstName": "Ahmed",
+  "lastName": "Al Mansouri",
+  "email": "ahmed.new@email.com",
+  "phone": "+971501234567",
+  "address": {
+    "street": "Dubai Mall, Downtown",
+    "city": "Dubai",
+    "country": "AE"
+  }
+}
+```
+
+#### Step 2: Microservice Processing
+```java
+@RestController
+public class CustomerController {
+    
+    @Autowired
+    private AdapterGatewayClient adapterClient;
+    
+    @PutMapping("/api/customers/{customerId}/profile")
+    public ResponseEntity<CustomerResponse> updateProfile(
+        @PathVariable String customerId,
+        @RequestBody CustomerUpdateRequest request) {
+        
+        // Build adapter payload
+        Map<String, Object> payload = Map.of(
+            "customerId", customerId,
+            "firstName", request.getFirstName(),
+            "lastName", request.getLastName(),
+            "email", request.getEmail(),
+            "phone", request.getPhone(),
+            "address", request.getAddress(),
+            "correlationId", UUID.randomUUID().toString()
+        );
+        
+        // Call adapter
+        StandardResponse<?> response = adapterClient.invoke("customer_api", payload);
+        
+        return ResponseEntity.ok(buildCustomerResponse(response));
+    }
+}
+```
+
+#### Step 3: Gateway Processing
+
+1. **Configuration Lookup**:
+   - Service name: `customer_api`
+   - Protocol: `REST_JSON`
+   - Endpoint: `https://api.adcb.com/customers`
+   - Method: `POST`
+
+2. **Template Application**:
+   - Load `customer_request.json` template
+   - Apply variable substitution
+   - Generate transformed request
+
+3. **Protocol Handler Selection**:
+   - Select `RestJsonProtocolHandler`
+   - Apply authentication (API Key)
+   - Set headers and timeouts
+
+#### Step 4: Transformed External Request
+```http
+POST https://api.adcb.com/customers
+Content-Type: application/json
+X-API-Key: secret-api-key
+X-Correlation-ID: uuid-generated
+
+{
+  "customerId": "12345",
+  "action": "PROFILE_UPDATE",
+  "data": {
+    "personalInfo": {
+      "firstName": "Ahmed",
+      "lastName": "Al Mansouri",
+      "email": "ahmed.new@email.com",
+      "phone": "+971501234567"
+    },
+    "address": {
+      "street": "Dubai Mall, Downtown",
+      "city": "Dubai",
+      "country": "AE"
+    }
+  },
+  "requestMetadata": {
+    "timestamp": "2025-09-16T08:52:00Z",
+    "source": "MOBILE_APP",
+    "correlationId": "uuid-12345"
+  }
+}
+```
+
+#### Step 5: External System Response
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "status": "SUCCESS",
+  "customerId": "12345",
+  "customerData": {
+    "fullName": "Ahmed Al Mansouri",
+    "accountStatus": "ACTIVE",
+    "profileVersion": "2.1"
+  },
+  "lastModified": "2025-09-16T08:52:15Z"
+}
+```
+
+#### Step 6: Response Transformation
+
+**Template Applied** (`customer_response.json`):
+```json
+{
+  "success": true,
+  "customerId": "12345",
+  "profile": {
+    "name": "Ahmed Al Mansouri",
+    "status": "ACTIVE",
+    "lastUpdated": "2025-09-16T08:52:15Z"
+  }
+}
+```
+
+#### Step 7: Final Response to Mobile App
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "success": true,
+  "message": "Profile updated successfully",
+  "customer": {
+    "id": "12345",
+    "name": "Ahmed Al Mansouri",
+    "status": "ACTIVE",
+    "lastUpdated": "2025-09-16T08:52:15Z"
+  }
+}
+```
+
+### Performance Metrics
+
+**Typical Performance** (measured in development):
+- **Template Processing**: < 5ms
+- **Protocol Handler Execution**: 10-500ms (depends on external service)
+- **Response Transformation**: < 3ms
+- **Total Adapter Overhead**: < 15ms
+
+---
+
+## Advanced Configuration
+
+### Environment-Specific Configuration
+
+**Development Environment**:
+```yaml
+adapter:
+  services:
+    customer_api:
+      endpointUrl: https://dev-api.adcb.com/customers
+      authentication:
+        tokenSource: ${DEV_API_TOKEN}
+  debug:
+    enabled: true
+    logRequests: true
+    logResponses: true
+```
+
+**Production Environment**:
+```yaml
+adapter:
+  services:
+    customer_api:
+      endpointUrl: https://prod-api.adcb.com/customers
+      authentication:
+        tokenSource: ${PROD_API_TOKEN}
+      timeout: 10000
+      retryAttempts: 2
+  debug:
+    enabled: false
+```
+
+### Circuit Breaker Configuration
+
+```yaml
+adapter:
+  circuitBreaker:
+    enabled: true
+    failureRateThreshold: 50
+    waitDurationInOpenState: 30s
+    slidingWindowSize: 10
+    minimumNumberOfCalls: 5
+```
+
+### Caching Configuration
+
+```yaml
+adapter:
+  cache:
+    enabled: true
+    defaultTtl: 300  # 5 minutes
+    services:
+      customer_api:
+        cacheable: true
+        ttl: 600  # 10 minutes
+        keyPattern: "customer:${customerId}"
+```
+
+### Metrics and Monitoring
+
+**Actuator Endpoints**:
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,adapter
+  endpoint:
+    adapter:
+      enabled: true
+```
+
+**Custom Metrics Exposed**:
+- `adapter.requests.total`: Total requests processed
+- `adapter.requests.duration`: Request processing time
+- `adapter.errors.total`: Error count by service
+- `adapter.cache.hits`: Cache hit rate
+
+---
+
+## Testing Framework
+
+### Unit Testing
+
+**Testing Protocol Handlers**:
+```java
+@ExtendWith(MockitoExtension.class)
+class RestJsonProtocolHandlerTest {
+    
+    @Mock
+    private WebClient webClient;
+    
+    @InjectMocks
+    private RestJsonProtocolHandler handler;
+    
+    @Test
+    void shouldExecuteRestCall() {
+        // Given
+        ServiceMetadata config = ServiceMetadata.builder()
+            .endpointUrl("https://api.test.com/resource")
+            .httpMethod("POST")
+            .build();
+        
+        Map<String, Object> requestBody = Map.of("id", "123");
+        
+        // Mock WebClient behavior
+        when(webClient.method(any(HttpMethod.class)))
+            .thenReturn(requestBodyUriSpec);
+        
+        // When
+        Object result = handler.execute(config, requestBody);
+        
+        // Then
+        assertThat(result).isNotNull();
+        verify(webClient).method(HttpMethod.POST);
+    }
+}
+```
+
+### Integration Testing with WireMock
+
+**End-to-End Test**:
+```java
+@SpringBootTest(classes = TestApplication.class)
+@ActiveProfiles("test")
+class CustomerRestE2ETest {
+
+    private static WireMockServer wireMockServer;
+    
+    @Autowired
+    private AdapterGatewayClient client;
+
+    @BeforeAll
+    static void startWireMock() {
+        wireMockServer = new WireMockServer(8089);
+        wireMockServer.start();
+        
+        wireMockServer.stubFor(post(urlEqualTo("/api/customers"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"customerId\":\"12345\",\"name\":\"Ahmed\"}")));
+    }
+
+    @Test
+    void shouldProcessCustomerRequest() {
+        // Given
+        Map<String, Object> request = Map.of("customerId", "12345");
+        
+        // When
+        StandardResponse<?> response = client.invoke("customer_rest_service", request);
+        
+        // Then
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getPayload()).isNotNull();
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) response.getPayload();
+        assertThat(payload.get("customerId")).isEqualTo("12345");
+        assertThat(payload.get("name")).isEqualTo("Ahmed");
+    }
+}
+```
+
+### Performance Testing
+
+**Load Testing Configuration**:
+```yaml
+# application-performance-test.yml
+adapter:
+  services:
+    load_test_service:
+      protocol: REST_JSON
+      endpointUrl: http://localhost:8080/mock/high-load
+      timeout: 5000
+      connectionPool:
+        maxConnections: 100
+        maxConnectionsPerRoute: 20
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. "No beans of 'ProtocolHandler' found"
+
+**Cause**: Protocol handler beans not registered or wrong package scanning.
+
+**Solution**:
+```java
+@SpringBootApplication(scanBasePackages = {
+    "org.adcb.adapter.gateway",
+    "org.adcb.adapter.protocol.rest",
+    "org.adcb.adapter.protocol.proxy"
+})
+public class Application { }
+```
+
+#### 2. "Template not found" Error
+
+**Cause**: Template path misconfiguration or missing template files.
+
+**Solution**:
+```yaml
+adapter:
+  templates:
+    path: classpath:/adapter-templates/  # Ensure correct path
+```
+
+**Verify template files exist**:
+```
+src/main/resources/adapter-templates/
+â”œâ”€â”€ customer_request.json
+â””â”€â”€ customer_response.json
+```
+
+#### 3. "Authentication Failed" Errors
+
+**Cause**: Missing or invalid authentication configuration.
+
+**Solution**:
+```yaml
+adapter:
+  services:
+    secure_service:
+      authentication:
+        type: API_KEY
+        headerName: X-API-Key
+        tokenSource: ${API_TOKEN}  # Ensure environment variable is set
+```
+
+#### 4. Transformation Errors
+
+**Cause**: Invalid template syntax or missing variables.
+
+**Debug Steps**:
+1. Enable debug logging:
+   ```yaml
+   logging:
+     level:
+       org.adcb.adapter.transform: DEBUG
+   ```
+
+2. Validate template syntax
+3. Check input data structure matches template variables
+
+### Performance Issues
+
+#### High Latency
+
+**Investigation Steps**:
+1. **Check external service performance**:
+   ```bash
+   curl -w "@curl-format.txt" -o /dev/null -s "https://api.service.com/endpoint"
+   ```
+
+2. **Review timeout configuration**:
+   ```yaml
+   adapter:
+     services:
+       slow_service:
+         timeout: 30000  # Increase timeout
+         retryAttempts: 1  # Reduce retries
+   ```
+
+3. **Enable connection pooling**:
+   ```yaml
+   adapter:
+     connectionPool:
+       maxConnections: 50
+       connectionTimeout: 5000
+       readTimeout: 15000
+   ```
+
+#### Memory Issues
+
+**Monitoring**:
+```yaml
+management:
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+**JVM Tuning**:
+```bash
+java -Xmx2g -Xms1g -XX:+UseG1GC -jar adapter-service.jar
+```
+
+### Debugging Tools
+
+#### Request/Response Logging
+
+```yaml
+logging:
+  level:
+    org.adcb.adapter.protocol: DEBUG
+    org.adcb.adapter.gateway: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+```
+
+#### Actuator Health Checks
+
+```yaml
+management:
+  health:
+    adapter:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+```
+
+Access health endpoint: `GET /actuator/health`
+
+---
+
+## References & Support
+
+### Repository Links
+
+- **Main Repository**: [https://github.com/praveenbommalibits/adapter-service](https://github.com/praveenbommalibits/adapter-service)
+- **GitHub Packages**: [https://github.com/praveenbommalibits/adapter-service/packages](https://github.com/praveenbommalibits/adapter-service/packages)
+- **Release Workflow**: [https://github.com/praveenbommalibits/adapter-service/.github/workflows/release.yml](https://github.com/praveenbommalibits/adapter-service/.github/workflows/release.yml)
+- **API Documentation**: [Generated Javadocs]
+
+### Development Team
+
+| Role | Name | Email | Slack |
+|------|------|-------|-------|
+| **Technical Lead** | Praveen Bommalibits | praveen@adcb.com | @praveen |
+| **Senior Developer** | [Name] | [email] | @[handle] |
+| **DevOps Engineer** | [Name] | [email] | @[handle] |
+
+### Support Channels
+
+- **Slack Channel**: #adapter-platform-support
+- **Email**: adapter-platform@adcb.com
+- **Jira Project**: ADAPT
+- **Emergency Contact**: [Phone number]
+
+### Documentation Updates
+
+This documentation is maintained in the repository and should be updated with each major release. Last updated: **September 16, 2025**.
+
+**Contributing to Documentation**:
+1. Fork the repository
+2. Update relevant sections
+3. Submit a pull request
+4. Documentation team will review and merge
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | Sep 2025 | Initial release with REST and Proxy protocols |
+| 1.0.1 | [Future] | Bug fixes and performance improvements |
+| 1.1.0 | [Planned] | GRPC protocol support, enhanced caching |
+
+---
+
+*This documentation provides comprehensive coverage of the ADCB Adapter Platform. For specific implementation questions or issues not covered here, please reach out to the development team through the support channels listed above.*
+
+
+
+
+
+-----
+
+
+### Authentication Flow Integration
+
+#### Pre-Request Authentication
+```java
+// In Protocol Handler
+public Object execute(ServiceMetadata config, Object requestBody) {
+    // 1. Resolve authentication strategy
+    AuthenticationStrategy authStrategy = getAuthStrategy(config.getAuthenticationType());
+    
+    // 2. Apply authentication with retry for token refresh
+    try {
+        authStrategy.applyAuthentication(config, headers, requestBody);
+    } catch (TokenExpiredException e) {
+        // Refresh token and retry
+        authStrategy.refreshToken(config);
+        authStrategy.applyAuthentication(config, headers, requestBody);
+    }
+    
+    // 3. Execute request with authenticated headers
+    return executeRequest(config, headers, requestBody);
+}
+```
+
+### Security Best Practices
+
+1. **Credential Management**:
+   - Never hardcode credentials in configuration
+   - Use environment variables or secret management systems
+   - Implement credential rotation strategies
+
+2. **Token Security**:
+   - Cache tokens securely in memory only
+   - Implement token refresh before expiry
+   - Clear sensitive data after use
+
+3. **Error Handling**:
+   - Don't expose credentials in logs or error messages
+   - Implement proper authentication error mapping
+   - Monitor authentication failures for security alerts
+
+---
+
+## Resilience Patterns
+
+### Overview
+
+The ADCB Adapter Platform implements comprehensive resilience patterns to ensure system stability and fault tolerance when integrating with external services. The resilience framework includes retry mechanisms, circuit breakers, timeout management, and bulkhead isolation.
+
+### 1. Retry Mechanism
+
+#### Retry Strategies
+
+**Fixed Interval Retry**:
+```yaml
+adapter:
+  services:
+    unstable_service:
+      protocol: REST_JSON
+      endpointUrl: https://unreliable-api.com/data
+      resilience:
+        retry:
+          enabled: true
+          strategy: FIXED_INTERVAL
+          maxAttempts: 3
+          interval: 1000  # 1 second
+          retryableExceptions:
+            - "java.net.SocketTimeoutException"
+            - "java.net.ConnectException"
+            - "org.springframework.web.client.ResourceAccessException"
+          retryableHttpStatus:
+            - 500
+            - 502
+            - 503
+            - 504
+```
+
+**Exponential Backoff Retry**:
+```yaml
+adapter:
+  services:
+    rate_limited_service:
+      resilience:
+        retry:
+          enabled: true
+          strategy: EXPONENTIAL_BACKOFF
+          maxAttempts: 5
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 30000
+          jitterEnabled: true  # Adds randomness to prevent thundering herd
+```
+
+**Linear Backoff Retry**:
+```yaml
+adapter:
+  services:
+    gradual_service:
+      resilience:
+        retry:
+          strategy: LINEAR_BACKOFF
+          maxAttempts: 4
+          initialInterval: 2000
+          increment: 1000  # 2s, 3s, 4s, 5s
+```
+
+#### Retry Implementation
+
+```java
+@Component
+public class RetryHandler {
+    
+    public <T> T executeWithRetry(ServiceMetadata config, Supplier<T> operation) {
+        RetryConfig retryConfig = config.getResilience().getRetry();
+        
+        for (int attempt = 1; attempt <= retryConfig.getMaxAttempts(); attempt++) {
+            try {
+                return operation.get();
+            } catch (Exception e) {
+                if (!isRetryableException(e, retryConfig) || 
+                    attempt == retryConfig.getMaxAttempts()) {
+                    throw e;
+                }
+                
+                long delay = calculateDelay(attempt, retryConfig);
+                log.warn("Attempt {}/{} failed, retrying in {}ms: {}", 
+                         attempt, retryConfig.getMaxAttempts(), delay, e.getMessage());
+                
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Retry interrupted", ie);
+                }
+            }
+        }
+        throw new RuntimeException("All retry attempts exhausted");
+    }
+}
+```
+
+### 2. Circuit Breaker Pattern
+
+#### Circuit Breaker States
+
+```
+    [CLOSED] â”€â”€failure_thresholdâ”€â”€â–º [OPEN]
+        â–²                             â”‚
+        â”‚                             â”‚
+        â”‚                             â”‚ wait_duration
+        â”‚                             â”‚
+        â”‚                             â–¼
+    success â—„â”€â”€success_thresholdâ”€â”€ [HALF_OPEN]
+```
+
+#### Configuration
+
+```yaml
+adapter:
+  services:
+    fragile_service:
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50  # 50% failure rate triggers OPEN
+          slowCallRateThreshold: 70  # 70% slow calls triggers OPEN
+          slowCallDurationThreshold: 5000  # 5 seconds
+          waitDurationInOpenState: 30000  # 30 seconds in OPEN state
+          slidingWindowType: COUNT_BASED  # or TIME_BASED
+          slidingWindowSize: 10  # Last 10 calls
+          minimumNumberOfCalls: 5  # Minimum calls before evaluation
+          permittedNumberOfCallsInHalfOpenState: 3
+          automaticTransitionFromOpenToHalfOpenEnabled: true
+```
+
+#### Circuit Breaker Implementation
+
+```java
+@Component
+public class CircuitBreakerManager {
+    
+    private final Map<String, CircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
+    
+    public <T> T executeWithCircuitBreaker(String serviceName, 
+                                          ServiceMetadata config, 
+                                          Supplier<T> operation) {
+        CircuitBreaker circuitBreaker = getOrCreateCircuitBreaker(serviceName, config);
+        
+        return circuitBreaker.executeSupplier(() -> {
+            try {
+                T result = operation.get();
+                // Record success
+                circuitBreaker.recordSuccess();
+                return result;
+            } catch (Exception e) {
+                // Record failure
+                circuitBreaker.recordException(e);
+                throw e;
+            }
+        });
+    }
+    
+    private CircuitBreaker getOrCreateCircuitBreaker(String serviceName, ServiceMetadata config) {
+        return circuitBreakers.computeIfAbsent(serviceName, key -> {
+            CircuitBreakerConfig cbConfig = CircuitBreakerConfig.custom()
+                .failureRateThreshold(config.getCircuitBreaker().getFailureRateThreshold())
+                .waitDurationInOpenState(Duration.ofMillis(config.getCircuitBreaker().getWaitDuration()))
+                .slidingWindowSize(config.getCircuitBreaker().getSlidingWindowSize())
+                .minimumNumberOfCalls(config.getCircuitBreaker().getMinimumNumberOfCalls())
+                .build();
+                
+            return CircuitBreaker.of(serviceName, cbConfig);
+        });
+    }
+}
+```
+
+### 3. Timeout Management
+
+#### Multi-Level Timeout Configuration
+
+```yaml
+adapter:
+  # Global defaults
+  defaults:
+    connectionTimeout: 5000    # Connection establishment
+    readTimeout: 15000        # Response read timeout
+    writeTimeout: 10000       # Request write timeout
+    
+  services:
+    slow_service:
+      protocol: REST_JSON
+      endpointUrl: https://slow-api.com/data
+      timeouts:
+        connectionTimeout: 10000  # Override global default
+        readTimeout: 30000        # Extended for slow responses
+        writeTimeout: 15000       # Extended for large payloads
+        totalTimeout: 45000       # Total request timeout
+```
+
+#### Timeout Implementation
+
+```java
+public class TimeoutAwareProtocolHandler {
+    
+    public Object executeWithTimeout(ServiceMetadata config, Object requestBody) {
+        TimeoutConfig timeouts = config.getTimeouts();
+        
+        return CompletableFuture.supplyAsync(() -> {
+            // Configure WebClient with timeouts
+            WebClient client = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create()
+                        .responseTimeout(Duration.ofMillis(timeouts.getReadTimeout()))
+                        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeouts.getConnectionTimeout())
+                ))
+                .build();
+                
+            return executeRequest(client, config, requestBody);
+        })
+        .orTimeout(timeouts.getTotalTimeout(), TimeUnit.MILLISECONDS)
+        .exceptionally(throwable -> {
+            if (throwable instanceof TimeoutException) {
+                throw new ServiceTimeoutException("Service call exceeded timeout: " + 
+                    timeouts.getTotalTimeout() + "ms", throwable);
+            }
+            throw new ServiceException("Service call failed", throwable);
+        })
+        .join();
+    }
+}
+```
+
+### 4. Bulkhead Isolation
+
+#### Thread Pool Isolation
+
+```yaml
+adapter:
+  threadPools:
+    critical_services:
+      corePoolSize: 10
+      maxPoolSize: 20
+      queueCapacity: 100
+      threadNamePrefix: "critical-"
+      services:
+        - payment_service
+        - account_service
+        
+    general_services:
+      corePoolSize: 5
+      maxPoolSize: 15
+      queueCapacity: 50
+      threadNamePrefix: "general-"
+      services:
+        - notification_service
+        - audit_service
+```
+
+#### Connection Pool Isolation
+
+```yaml
+adapter:
+  connectionPools:
+    high_priority:
+      maxConnections: 50
+      maxConnectionsPerRoute: 10
+      connectionTimeout: 5000
+      socketTimeout: 15000
+      services:
+        - core_banking_api
+        - payment_gateway
+        
+    low_priority:
+      maxConnections: 20
+      maxConnectionsPerRoute: 5
+      connectionTimeout: 10000
+      socketTimeout: 30000
+      services:
+        - reporting_service
+        - analytics_service
+```
+
+### 5. Comprehensive Resilience Configuration
+
+#### Service-Level Resilience Stack
+
+```yaml
+adapter:
+  services:
+    critical_payment_service:
+      protocol: REST_JSON
+      endpointUrl: https://payments.adcb.com/api/v1/transfer
+      
+      # Authentication with retry
+      authentication:
+        type: OAUTH2
+        tokenEndpoint: https://auth.adcb.com/oauth/token
+        clientId: ${PAYMENT_CLIENT_ID}
+        clientSecret: ${PAYMENT_CLIENT_SECRET}
+        retryConfig:
+          maxAttempts: 3
+          backoffInterval: 1000
+      
+      # Comprehensive resilience
+      resilience:
+        # Circuit breaker for fault tolerance
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 30    # Lower threshold for critical service
+          waitDurationInOpenState: 20000  # Shorter recovery time
+          slidingWindowSize: 20
+          minimumNumberOfCalls: 10
+          
+        # Retry for transient failures
+        retry:
+          enabled: true
+          strategy: EXPONENTIAL_BACKOFF
+          maxAttempts: 3
+          initialInterval: 500
+          multiplier: 2.0
+          maxInterval: 5000
+          jitterEnabled: true
+          
+        # Timeout management
+        timeouts:
+          connectionTimeout: 3000     # Quick connection for critical service
+          readTimeout: 10000         # Reasonable response time
+          totalTimeout: 15000        # Total operation timeout
+          
+        # Rate limiting
+        rateLimiter:
+          enabled: true
+          permitsPerSecond: 100
+          timeoutDuration: 1000
+          
+      # Thread pool assignment
+      threadPool: critical_services
+      connectionPool: high_priority
+```
+
+### 6. Resilience Monitoring and Metrics
+
+#### Health Check Integration
+
+```yaml
+management:
+  health:
+    circuitbreaker:
+      enabled: true
+    ratelimiters:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+#### Custom Resilience Metrics
+
+```java
+@Component
+public class ResilienceMetrics {
+    
+    private final MeterRegistry meterRegistry;
+    
+    public ResilienceMetrics(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
+    
+    public void recordCircuitBreakerState(String serviceName, CircuitBreaker.State state) {
+        Gauge.builder("adapter.circuitbreaker.state")
+            .tag("service", serviceName)
+            .tag("state", state.name())
+            .register(meterRegistry, state, s -> s == CircuitBreaker.State.CLOSED ? 1 : 0);
+    }
+    
+    public void recordRetryAttempt(String serviceName, int attempt, boolean success) {
+        Counter.builder("adapter.retry.attempts")
+            .tag("service", serviceName)
+            .tag("attempt", String.valueOf(attempt))
+            .tag("success", String.valueOf(success))
+            .register(meterRegistry)
+            .increment();
+    }
+    
+    public void recordTimeout(String serviceName, String timeoutType, Duration duration) {
+        Timer.builder("adapter.timeout")
+            .tag("service", serviceName)
+            .tag("type", timeoutType)
+            .register(meterRegistry)
+            .record(duration);
+    }
+}
+```
+
+#### Resilience Dashboard Metrics
+
+Available metrics for monitoring:
+- `adapter.circuitbreaker.calls.total` - Total circuit breaker calls
+- `adapter.circuitbreaker.state` - Circuit breaker state gauge
+- `adapter.retry.attempts.total` - Retry attempt counters
+- `adapter.timeout.duration` - Timeout duration histograms
+- `adapter.bulkhead.queue.size` - Thread pool queue sizes
+- `adapter.ratelimiter.permits` - Rate limiter permit usage
