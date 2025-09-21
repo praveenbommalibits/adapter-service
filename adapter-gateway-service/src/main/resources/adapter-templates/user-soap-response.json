@@ -1,0 +1,19 @@
+{
+  "user": {
+    "id": "${Body.getUserDetailsResponse.user.id!''}",
+    "fullName": "${Body.getUserDetailsResponse.user.name!''}",
+    "emailAddress": "${Body.getUserDetailsResponse.user.email!''}",
+    "phoneNumber": "${Body.getUserDetailsResponse.user.phone!''}",
+    "fullAddress": "${Body.getUserDetailsResponse.user.address!''}",
+    "accountCreated": "${Body.getUserDetailsResponse.user.createdAt!''}"
+  },
+  "serviceStatus": {
+    "success": "${Body.getUserDetailsResponse.success!'false'}",
+    "message": "${Body.getUserDetailsResponse.message!'Unknown'}"
+  },
+  "metadata": {
+    "retrievedAt": "${currentTimeISO}",
+    "source": "soap-downstream-api",
+    "protocol": "SOAP"
+  }
+}

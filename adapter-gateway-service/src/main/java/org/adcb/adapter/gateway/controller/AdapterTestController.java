@@ -34,17 +34,25 @@ public class AdapterTestController {
     }
 
 
-    /*@GetMapping("/test/user/{userId}")
-    public StandardResponse<?> getUserViaAdapter(@PathVariable String userId) {
-        log.info("Testing adapter with userId: {}", userId);
 
+    /**
+     * Test endpoint to call SOAP user-details API via adapter.
+     *
+     * GET /adapter/test/soap-user/{userId}
+     */
+    @GetMapping("/test/soap-user/{userId}")
+    public Mono<StandardResponse<?>> getSoapUserViaAdapter(@PathVariable String userId) {
+        log.info("Testing SOAP adapter with userId: {}", userId);
         Map<String, Object> requestData = Map.of(
-                "userId", userId,
-                "operation", "getUserById"
+                "userId", userId
         );
+        return Mono.fromCallable(() ->
+                        adapterService.invoke("user-soap-api", requestData)
+                )
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(r -> (StandardResponse<?>) r);
+    }
 
-        return adapterService.invoke("user-api", requestData);
-    }*/
 
     /**
      * Generic test endpoint with request body.
@@ -57,4 +65,23 @@ public class AdapterTestController {
         log.info("Testing service '{}' with  {}", serviceName, requestData);
         return adapterService.invoke(serviceName, requestData);
     }
+
+    /**
+     * Generic test endpoint with request body for any configured service.
+     *
+     * POST /adapter/test/{serviceName}
+     */
+    @PostMapping("/test1/{serviceName}")
+    public Mono<StandardResponse<?>> testService1(@PathVariable String serviceName,
+                                                 @RequestBody Map<String, Object> requestData) {
+        log.info("Testing service '{}' with  {}", serviceName, requestData);
+        return Mono.fromCallable(() ->
+                        adapterService.invoke(serviceName, requestData)
+                )
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(r -> (StandardResponse<?>) r);
+    }
+
+
+
 }

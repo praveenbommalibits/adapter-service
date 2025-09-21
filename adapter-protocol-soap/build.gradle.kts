@@ -17,10 +17,15 @@ repositories {
 dependencies {
     implementation(project(":adapter-spi"))
     implementation(project(":adapter-commons"))
+    implementation(project(":adapter-transform-core"))
     // For SOAP transport and XML processing
     implementation("org.springframework.ws:spring-ws-core:4.0.3")
+    implementation("org.springframework.boot:spring-boot-starter-webflux:3.2.5")
     implementation("org.springframework.boot:spring-boot-starter-web-services:3.2.5")
     implementation("org.apache.commons:commons-lang3:3.14.0")
+
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
 
     // XML serialization/deserialization
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.0")

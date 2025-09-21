@@ -14,6 +14,7 @@ import org.springframework.context.annotation.ComponentScan;
         "org.adcb.adapter.spi",
         "org.adcb.adapter.transform",
         "org.adcb.adapter.protocol.rest",
+        "org.adcb.adapter.protocol.soap",
         "org.adcb.adapter.gateway"
 })
 public class AdapterGatewayApplication {

@@ -57,6 +57,40 @@ adapter:
           readTimeout: 10000
           totalTimeout: 15000
 
+    user-soap-api:
+      serviceName: "user-soap-api"
+      protocol: "SOAP"
+      endpointUrl: "http://localhost:8090/downstream/soap"
+      httpMethod: "POST"
+      requestTemplate: "user-soap-request.xml"
+      responseTemplate: "user-soap-response.json"
+      headers:
+        Content-Type: "text/xml; charset=utf-8"
+        SOAPAction: ""
+      auth:
+        type: "NONE"  # No authentication needed for this example
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50.0
+          waitDurationInOpenStateMs: 30000
+          slidingWindowSize: 10
+          minimumNumberOfCalls: 5
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: "EXPONENTIAL_BACKOFF"
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 10000
+          retryableExceptions:
+            - "org.springframework.ws.client.WebServiceIOException"
+            - "java.net.ConnectException"
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 10000
+          totalTimeout: 15000
+
 # Management & Monitoring
 management:
   endpoints:
