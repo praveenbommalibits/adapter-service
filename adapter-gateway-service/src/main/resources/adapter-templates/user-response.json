@@ -1,0 +1,14 @@
+{
+  "user": {
+    "id": "${id}",
+    "fullName": "${name}",
+    "emailAddress": "${email}",
+    "phoneNumber": "${phone}",
+    "fullAddress": "${address}",
+    "accountCreated": "${createdAt}"
+  },
+  "metadata": {
+    "retrievedAt": "${currentTimeISO}",
+    "source": "downstream-api"
+  }
+}

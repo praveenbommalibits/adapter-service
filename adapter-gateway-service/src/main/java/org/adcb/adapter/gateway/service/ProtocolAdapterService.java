@@ -1,3 +1,4 @@
+/*
 package org.adcb.adapter.gateway.service;
 
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
+*/
 /**
  * Core orchestration service that routes requests to correct ProtocolHandler,
  * performs request payload rendering using templates, and normalizes responses
@@ -30,7 +32,8 @@ import java.util.Map;
  *  * TODO RETRIES AND FALLBACKS - BACK PRESSURE APPROACH AND CIRCUIT BREAKER PATTERN
  *  * TODO VERSIONING NEED TO CHECK
  *  *
- *  */
+ *  *//*
+
 
 @Service
 @RequiredArgsConstructor
@@ -38,14 +41,15 @@ import java.util.Map;
 public class ProtocolAdapterService {
 
     private final ServiceConfig serviceConfig;
-    private final AdapterTransformService transformService;
+    private final EnhancedProtocolAdapterService transformService;
     @Autowired
     public Map<String, ProtocolHandler> protocolHandlers;
 
     @Value("${adapter.templates.path:src/main/resources/templates/}")
     private String templatesPath;
 
-    /**
+    */
+/**
      * Main gateway call method.
      * Steps:
      *  1. Load and render request template with request data (if template exists).
@@ -55,7 +59,8 @@ public class ProtocolAdapterService {
      * @param serviceName logical service identifier from microservice call
      * @param requestData generic request data map (supports nested structures)
      * @return StandardResponse with normalized response attributes and payload
-     */
+     *//*
+
     public StandardResponse<?> call(String serviceName, Map<String, Object> requestData) {
         ServiceMetadata metadata = serviceConfig.getServices().get(serviceName);
 
@@ -127,13 +132,15 @@ public class ProtocolAdapterService {
         }
     }
 
-    /**
+    */
+/**
      * Loads the content of a template file from the templates directory.
      *
      * @param templateFileName relative path or file name of the template
      * @return content of the template file as String
      * @throws IOException if reading the file fails
-     */
+     *//*
+
     public String loadTemplateContent(String templateFileName) throws IOException {
         if (templateFileName == null || templateFileName.isBlank()) {
             return null;
@@ -142,12 +149,15 @@ public class ProtocolAdapterService {
         return Files.readString(templatePath);
     }
 
-    /**
+    */
+/**
      * Retrieve or generate a correlation id for tracing and logging.
      * Replace this with your actual implementation.
-     */
+     *//*
+
     private String getCorrelationId() {
         // Stub: generate or extract correlation id from MDC or context
         return java.util.UUID.randomUUID().toString();
     }
 }
+*/

@@ -2,6 +2,7 @@ package org.adcb.adapter.gateway.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.adcb.adapter.commons.*;
+import org.adcb.adapter.gateway.config.ServiceConfig;
 import org.adcb.adapter.gateway.resilience.CircuitBreakerManager;
 import org.adcb.adapter.gateway.resilience.RetryHandler;
 import org.adcb.adapter.spi.ProtocolHandler;
@@ -40,7 +41,8 @@ public class EnhancedProtocolAdapterService {
 
     @Autowired
     private final Map<String, ProtocolHandler> protocolHandlers;
-    private final Map<String, ServiceMetadata> serviceConfigs;
+    private final ServiceConfig serviceConfigs;
+    //private final Map<String, ServiceMetadata> serviceConfigs;
     private final TemplateService templateService;
     private final CircuitBreakerManager circuitBreakerManager;
     private final RetryHandler retryHandler;
@@ -49,7 +51,7 @@ public class EnhancedProtocolAdapterService {
     @Autowired
     public EnhancedProtocolAdapterService(
             Map<String, ProtocolHandler> protocolHandlers,
-            Map<String, ServiceMetadata> serviceConfigs,
+            ServiceConfig serviceConfigs,
             TemplateService templateService,
             CircuitBreakerManager circuitBreakerManager,
             RetryHandler retryHandler,
@@ -63,7 +65,7 @@ public class EnhancedProtocolAdapterService {
         this.errorMapper = errorMapper;
 
         log.info("EnhancedProtocolAdapterService initialized with {} protocol handlers and {} service configs",
-                protocolHandlers.size(), serviceConfigs.size());
+                protocolHandlers.size(), serviceConfigs);
     }
 
     /**
@@ -147,7 +149,7 @@ public class EnhancedProtocolAdapterService {
     /**
      * Processes raw response from protocol handler into StandardResponse.
      */
-    private StandardResponse<?> processResponse(Object rawResponse, ServiceMetadata config,
+    /*private StandardResponse<?> processResponse(Object rawResponse, ServiceMetadata config,
                                                 String correlationId, long startTime) {
 
         long processingTime = System.currentTimeMillis() - startTime;
@@ -209,12 +211,73 @@ public class EnhancedProtocolAdapterService {
                     .protocol(config.getProtocol())
                     .build();
         }
+    }*/
+    /**
+     * Processes raw response from protocol handler into StandardResponse.
+     * Note: Response templates are already applied by the ProtocolHandler.
+     */
+    private StandardResponse<?> processResponse(Object rawResponse, ServiceMetadata config,
+                                                String correlationId, long startTime) {
+
+        long processingTime = System.currentTimeMillis() - startTime;
+
+        try {
+            // If response is already a StandardResponse (from error mapping), return as-is
+            if (rawResponse instanceof StandardResponse) {
+                StandardResponse<?> standardResp = (StandardResponse<?>) rawResponse;
+                return enrichStandardResponse(standardResp, config, correlationId, processingTime);
+            }
+
+            // rawResponse is already processed/templated by the ProtocolHandler
+            // Just wrap it in StandardResponse
+            return StandardResponse.builder()
+                    .success(true)
+                    .status(ResponseStatus.SUCCESS)
+                    .payload(rawResponse)  // <-- Use rawResponse directly, no re-templating
+                    .correlationId(correlationId)
+                    .timestamp(LocalDateTime.now())
+                    .serviceName(config.getServiceName())
+                    .protocol(config.getProtocol())
+                    .performance(PerformanceMetrics.builder()
+                            .executionTimeMs(processingTime)
+                            .circuitBreakerState("CLOSED")
+                            .retryAttempts(0)
+                            .build())
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Response processing failed for service '{}': {}",
+                    config.getServiceName(), e.getMessage());
+
+            ErrorDetails error = ErrorDetails.builder()
+                    .errorCode("RESPONSE_PROCESSING_ERROR")
+                    .errorMessage("Failed to process response")
+                    .errorDescription("Error occurred while processing the response: " + e.getMessage())
+                    .category(ErrorCategory.TECHNICAL)
+                    .severity(ErrorSeverity.HIGH)
+                    .source("GATEWAY_SERVICE")
+                    .technicalMessage(e.getMessage())
+                    .exceptionClass(e.getClass().getSimpleName())
+                    .retryable(false)
+                    .build();
+
+            return StandardResponse.builder()
+                    .success(false)
+                    .status(ResponseStatus.TECHNICAL_ERROR)
+                    .error(error)
+                    .correlationId(correlationId)
+                    .timestamp(LocalDateTime.now())
+                    .serviceName(config.getServiceName())
+                    .protocol(config.getProtocol())
+                    .build();
+        }
     }
+
 
     /**
      * Applies response template transformation if configured.
      */
-    private Object applyResponseTemplate(Object rawResponse, ServiceMetadata config)
+    /*private Object applyResponseTemplate(Object rawResponse, ServiceMetadata config)
             throws TemplateProcessingException {
 
         if (rawResponse instanceof Map) {
@@ -234,7 +297,7 @@ public class EnhancedProtocolAdapterService {
         }
 
         return rawResponse;
-    }
+    }*/
 
     /**
      * Enriches existing StandardResponse with correlation and performance data.
@@ -281,7 +344,7 @@ public class EnhancedProtocolAdapterService {
      * Gets service configuration by name.
      */
     private ServiceMetadata getServiceConfig(String serviceName) {
-        ServiceMetadata config = serviceConfigs.get(serviceName);
+        ServiceMetadata config = serviceConfigs.getServices().get(serviceName);
         if (config == null) {
             throw new IllegalArgumentException("Service configuration not found: " + serviceName);
         }

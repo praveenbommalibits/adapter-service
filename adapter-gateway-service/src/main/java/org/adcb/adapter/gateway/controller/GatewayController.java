@@ -1,8 +1,7 @@
 package org.adcb.adapter.gateway.controller;
 
-import org.adcb.adapter.gateway.service.ProtocolAdapterService;
+import org.adcb.adapter.gateway.service.EnhancedProtocolAdapterService;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -19,12 +18,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class GatewayController {
 
-    private final ProtocolAdapterService adapterService;
+    private final EnhancedProtocolAdapterService adapterService;
 
     @PostMapping("/call/{serviceName}")
     public ResponseEntity<Object> callService(@PathVariable String serviceName,
                                               @RequestBody Map<String, Object> requestData) {
-        Object response = adapterService.call(serviceName, requestData);
+        Object response = adapterService.invoke(serviceName, requestData);
         return ResponseEntity.ok(response);
     }
 }

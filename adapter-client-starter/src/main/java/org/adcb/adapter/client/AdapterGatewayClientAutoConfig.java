@@ -1,7 +1,7 @@
 package org.adcb.adapter.client;
 
 
-import org.adcb.adapter.gateway.service.ProtocolAdapterService;
+import org.adcb.adapter.gateway.service.EnhancedProtocolAdapterService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,7 +14,7 @@ public class AdapterGatewayClientAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    public AdapterGatewayClient adapterGatewayClient(ProtocolAdapterService protocolAdapterService) {
+    public AdapterGatewayClient adapterGatewayClient(EnhancedProtocolAdapterService protocolAdapterService) {
         return new AdapterGatewayClient(protocolAdapterService);
     }
 }

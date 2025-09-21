@@ -1,7 +1,6 @@
 package org.adcb.adapter.client;
 
-import org.adcb.adapter.gateway.service.ProtocolAdapterService;
-import org.adcb.adapter.commons.ServiceMetadata;
+import org.adcb.adapter.gateway.service.EnhancedProtocolAdapterService;
 import java.util.Map;
 
 /**
@@ -11,9 +10,9 @@ import java.util.Map;
  */
 public class AdapterGatewayClient {
 
-    private final ProtocolAdapterService protocolAdapterService;
+    private final EnhancedProtocolAdapterService protocolAdapterService;
 
-    public AdapterGatewayClient(ProtocolAdapterService protocolAdapterService) {
+    public AdapterGatewayClient(EnhancedProtocolAdapterService protocolAdapterService) {
         this.protocolAdapterService = protocolAdapterService;
     }
 
@@ -26,7 +25,7 @@ public class AdapterGatewayClient {
      */
     public Object invoke(String serviceName, Map<String, Object> requestParams) {
         try {
-            return protocolAdapterService.call(serviceName, requestParams);
+            return protocolAdapterService.invoke(serviceName, requestParams);
         } catch (Exception ex) {
             throw new ServiceInvocationException(
                     "Failed to invoke adapter service: " + serviceName, ex);

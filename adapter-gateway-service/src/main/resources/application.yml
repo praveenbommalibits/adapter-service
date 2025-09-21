@@ -1,24 +1,81 @@
 server:
   port: 8080
 
+# Application Configuration
+spring:
+  application:
+    name: adcb-adapter-service
+  boot:
+    admin:
+      client:
+        enabled: false
+  profiles:
+    active: dev
+
 adapter:
+  templates:
+    path: "classpath:/adapter-templates/"
+    cache:
+      enabled: true
+      ttl-minutes: 60
+
   services:
-    payment_service:
-      endpointUrl: https://api.payment-provider.com/v1/payments
-      protocol: REST_JSON
-      httpMethod: POST
+    user-api:
+      serviceName: "user-api"
+      protocol: "REST_JSON"
+      endpointUrl: "http://localhost:8090/downstream/api/users/{userId}"
+      httpMethod: "GET"
+      requestTemplate: "user-request.json"
+      responseTemplate: "user-response.json"
       headers:
-        Authorization: "Bearer sampletoken"
-      requestTemplate: payment_request_template.json
-      responseTemplate: payment_response_template.json
+        Accept: "application/json"
+        Content-Type: "application/json"
+      auth:
+        type: "API_KEY"
+        strategy: "HEADER"
+        keyName: "X-API-Key"
+        tokenSource: "test-api-key-12345"
+      resilience:
+        circuitBreaker:
+          enabled: true
+          failureRateThreshold: 50.0
+          waitDurationInOpenStateMs: 30000
+          slidingWindowSize: 10
+          minimumNumberOfCalls: 5
+        retry:
+          enabled: true
+          maxAttempts: 3
+          strategy: "EXPONENTIAL_BACKOFF"
+          initialInterval: 1000
+          multiplier: 2.0
+          maxInterval: 10000
+          retryableExceptions:
+            - "org.springframework.web.reactive.function.client.WebClientException"
+            - "java.net.ConnectException"
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 10000
+          totalTimeout: 15000
 
-    customer_service:
-      endpointUrl: https://api.customer.com/v1/customers
-      protocol: REST_JSON
-      httpMethod: GET
-      headers:
-        X-API-Key: apikey123
-      requestTemplate: customer_request_template.json
-      responseTemplate: customer_response_template.json
+# Management & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
-
+# Logging
+logging:
+  level:
+    org.adcb.adapter: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+    reactor.netty.channel.FluxReceive: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
