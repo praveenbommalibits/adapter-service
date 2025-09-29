@@ -17,6 +17,9 @@ repositories {
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.5"))
 
+    // Spring Boot WebFlux for reactive REST endpoints
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
+
     implementation(project(":adapter-gateway-service"))
     implementation(project(":adapter-transform-core"))
     implementation(project(":adapter-commons"))
