@@ -17,6 +17,7 @@ It provides a central adapter layer and starter library for communication with R
 - **Rapid Onboarding:** New or existing microservices can simply add a single dependency and start integrating with diverse backend APIs using the same `invoke` method.
 - **Proxy/Pass-through Support:** Easily build microservices acting as direct HTTP proxies without transformation/normalization logic.
 
+![Adapter Service Architecture](./adapter-service.png)
 ---
 
 ## How Does It Work?
