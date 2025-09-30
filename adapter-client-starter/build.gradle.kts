@@ -45,7 +45,7 @@ tasks.jar {
     enabled = true
 }
 
-publishing {
+/*publishing {
     publications {
         create<MavenPublication>("starter") {
             from(components["java"])
@@ -53,4 +53,4 @@ publishing {
             // any additional configuration here
         }
     }
-}
+}*/
