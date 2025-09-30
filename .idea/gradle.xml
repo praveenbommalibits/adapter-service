@@ -9,7 +9,6 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
-            <option value="$PROJECT_DIR$/adapter-admin-ui" />
             <option value="$PROJECT_DIR$/adapter-client-starter" />
             <option value="$PROJECT_DIR$/adapter-commons" />
             <option value="$PROJECT_DIR$/adapter-config-service" />

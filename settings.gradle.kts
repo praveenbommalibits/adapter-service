@@ -6,7 +6,6 @@ include(
     "adapter-client-starter",
     "adapter-gateway-service",
     "adapter-config-service",
-    "adapter-admin-ui",
     "adapter-protocol-rest",
     "adapter-protocol-grpc",
     "adapter-transform-core",

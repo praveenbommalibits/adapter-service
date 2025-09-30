@@ -1,5 +1,6 @@
 plugins {
     `java-library`
+    `maven-publish`
 }
 
 group = "org.adcb.adapter"
@@ -42,4 +43,14 @@ tasks.withType<Test> {
 
 tasks.jar {
     enabled = true
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("starter") {
+            from(components["java"])
+            artifactId = "adapter-client-starter"
+            // any additional configuration here
+        }
+    }
 }

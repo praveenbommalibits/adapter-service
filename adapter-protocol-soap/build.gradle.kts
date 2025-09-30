@@ -1,6 +1,10 @@
 plugins {
-    id("java-library")
+    //id("org.springframework.boot") version "3.5.5"
+    //id("io.spring.dependency-management") version "1.1.0"
+    //java
+    `java-library`
 }
+
 
 group = "org.adcb.adapter"
 version = "1.0.0"
