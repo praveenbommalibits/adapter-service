@@ -20,10 +20,10 @@ dependencies {
     // Spring Boot WebFlux for reactive REST endpoints
     implementation("org.springframework.boot:spring-boot-starter-webflux")
 
-    implementation(project(":adapter-gateway-service"))
-    implementation(project(":adapter-transform-core"))
-    implementation(project(":adapter-commons"))
-    implementation(project(":adapter-spi"))
+    api(project(":adapter-gateway-service"))
+    api(project(":adapter-transform-core"))
+    api(project(":adapter-commons"))
+    api(project(":adapter-spi"))
 
     implementation("org.springframework.boot:spring-boot-starter")
     compileOnly("org.projectlombok:lombok:1.18.30")
