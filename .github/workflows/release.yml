@@ -117,12 +117,15 @@ jobs:
 
       - name: Publish to GitHub Packages
         run: |
-          ./gradlew :adapter-client-starter:publish \
-            -Pversion=${{ steps.get_version.outputs.version }}
-          ./gradlew :adapter-commons:publish \
-            -Pversion=${{ steps.get_version.outputs.version }}
-          ./gradlew :adapter-transform-core:publish \
-            -Pversion=${{ steps.get_version.outputs.version }}
+          echo "Publishing with version: ${{ steps.get_version.outputs.version }}"
+          ./gradlew publishClientModules -Pversion=${{ steps.get_version.outputs.version }}
+        #run: |
+         # ./gradlew :adapter-client-starter:publish \
+         #   -Pversion=${{ steps.get_version.outputs.version }}
+         # ./gradlew :adapter-commons:publish \
+         #  -Pversion=${{ steps.get_version.outputs.version }}
+         # ./gradlew :adapter-transform-core:publish \
+         #   -Pversion=${{ steps.get_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}

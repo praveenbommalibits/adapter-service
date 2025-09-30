@@ -1,23 +1,25 @@
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.kotlin.dsl.*  // for configure and create
-
 plugins {
     java
 }
 
-group = "org.adcb"
-version = project.findProperty("version") as String? ?: "1.0.0-SNAPSHOT"
-
-repositories {
-    mavenCentral()
+// At very top of build.gradle.kts
+fun getModuleDescription(moduleName: String) = when (moduleName) {
+    "adapter-client-starter" -> "Spring Boot starter for ADCB Adapter Platform - integration entry point"
+    "adapter-commons"        -> "Common DTOs, models and utilities for ADCB"
+    "adapter-transform-core" -> "Core transformation engine for requests/responses"
+    else                     -> "ADCB Adapter Platform module"
 }
+
+
+group = "org.adcb"
+// Use the version from command line or default to SNAPSHOT
+version = project.findProperty("version") ?: "1.0.0-SNAPSHOT"
 
 subprojects {
     apply(plugin = "java")
 
-    group = rootProject.group
-    version = rootProject.version
+    group = "org.adcb.adapter"  // Change this to adapter group
+    version = rootProject.version  // Inherit from root
 
     repositories {
         mavenCentral()
@@ -28,36 +30,25 @@ subprojects {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    dependencies {
-        testImplementation(platform("org.junit:junit-bom:5.10.0"))
-        testImplementation("org.junit.jupiter:junit-jupiter")
-    }
-
-    tasks.withType<Test> {
-        useJUnitPlatform()
-    }
-
     // Only configure publishing for specific modules
     if (project.name in listOf("adapter-client-starter", "adapter-commons", "adapter-transform-core")) {
         apply(plugin = "maven-publish")
 
-        // Configure the publishing extension once the plugin is present
         plugins.withId("maven-publish") {
             extensions.configure<PublishingExtension> {
                 publications {
                     create<MavenPublication>("maven") {
                         from(components["java"])
-                        artifactId = project.name
 
                         pom {
                             name.set("ADCB Adapter Platform - ${project.name}")
                             description.set(getModuleDescription(project.name))
-                            url.set("https://github.com/${System.getenv("GITHUB_REPOSITORY") ?: "YOUR_USERNAME/YOUR_REPO"}")
+                            url.set("https://github.com/praveenbommalibits/adapter-service")
 
                             licenses {
                                 license {
-                                    name.set("MIT License")
-                                    url.set("https://opensource.org/licenses/MIT")
+                                    name.set("Apache License 2.0")
+                                    url.set("https://opensource.org/licenses/Apache-2.0")
                                 }
                             }
 
@@ -70,9 +61,9 @@ subprojects {
                             }
 
                             scm {
-                                connection.set("scm:git:git://github.com/${System.getenv("GITHUB_REPOSITORY") ?: "YOUR_USERNAME/YOUR_REPO"}.git")
-                                developerConnection.set("scm:git:ssh://github.com:${System.getenv("GITHUB_REPOSITORY") ?: "YOUR_USERNAME/YOUR_REPO"}.git")
-                                url.set("https://github.com/${System.getenv("GITHUB_REPOSITORY") ?: "YOUR_USERNAME/YOUR_REPO"}")
+                                connection.set("scm:git:git://github.com/praveenbommalibits/adapter-service.git")
+                                developerConnection.set("scm:git:ssh://github.com/praveenbommalibits/adapter-service.git")
+                                url.set("https://github.com/praveenbommalibits/adapter-service")
                             }
                         }
                     }
@@ -81,7 +72,7 @@ subprojects {
                 repositories {
                     maven {
                         name = "GitHubPackages"
-                        url = uri("https://maven.pkg.github.com/${System.getenv("GITHUB_REPOSITORY") ?: "YOUR_USERNAME/YOUR_REPO"}")
+                        url = uri("https://maven.pkg.github.com/praveenbommalibits/adapter-service")
                         credentials {
                             username = System.getenv("GITHUB_ACTOR")
                             password = System.getenv("GITHUB_TOKEN")
@@ -91,23 +82,4 @@ subprojects {
             }
         }
     }
-}
-
-// Helper for module descriptions
-fun getModuleDescription(moduleName: String) = when (moduleName) {
-    "adapter-client-starter" -> "Spring Boot starter for ADCB Adapter Platform - integration entry point"
-    "adapter-commons"        -> "Common DTOs, models and utilities for ADCB"
-    "adapter-transform-core" -> "Core transformation engine for requests/responses"
-    else                     -> "ADCB Adapter Platform module"
-}
-
-// Aggregate publish task
-tasks.register("publishClientModules") {
-    group = "publishing"
-    description = "Publish client-facing modules to GitHub Packages"
-    dependsOn(
-        ":adapter-client-starter:publish",
-        ":adapter-commons:publish",
-        ":adapter-transform-core:publish"
-    )
 }
