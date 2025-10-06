@@ -27,7 +27,6 @@
 7. **Customization Examples & Best Practices**
     - Using only REST or SOAP modules
     - Minimal configuration for new integrations
-8. **Q&A + Next Steps**
 
 ---
 
@@ -581,8 +580,7 @@ The Adapter Service provides:
 - Test with different invocation patterns
 - Enable monitoring and resilience as needed
 
-**Questions & Discussion**
+
 
 ---
 
-_Last updated: 2025-10-03_

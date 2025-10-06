@@ -8,6 +8,8 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Simplified facade for client microservices to invoke adapter gateway services.
@@ -110,6 +112,58 @@ public class AdapterGatewayClient {
                 );
     }
 
+    /**
+     * Asynchronous with timeout - cancels operation if timeout exceeded
+     * Use for: Long-running operations, unreliable external APIs, SLA enforcement
+     */
+   /* public CompletableFuture<StandardResponse<?>> invokeAsyncWithTimeout(
+            String serviceName, Object requestData, Duration timeout) {
+
+        log.debug("Asynchronous invocation with {}ms timeout requested for service: {}",
+                timeout.toMillis(), serviceName);
+
+        CompletableFuture<StandardResponse<?>> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                return protocolAdapterService.invoke(serviceName, requestData);
+
+            } catch (Exception e) {
+                log.error("Timed async invocation failed for service '{}': {}", serviceName, e.getMessage(), e);
+                return buildErrorResponse(serviceName, e, "ASYNC_TIMEOUT_INVOCATION_FAILED");
+            }
+        });
+
+        // Apply timeout to the future
+        return future.completeOnTimeout(
+                buildTimeoutResponse(serviceName, timeout),
+                timeout.toMillis(),
+                TimeUnit.MILLISECONDS
+        );
+    }*/
+
+    /**
+     * Batch invocation - process multiple service calls in parallel
+     * Use for: Data aggregation, parallel service calls, bulk operations
+     */
+    /*public CompletableFuture<Map<String, StandardResponse<?>>> invokeBatch(
+            Map<String, Object> serviceRequests) {
+
+        log.debug("Batch invocation requested for {} services", serviceRequests.size());
+
+        Map<String, CompletableFuture<StandardResponse<?>>> futures = serviceRequests.entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> invokeAsync(entry.getKey(), entry.getValue())
+                ));
+
+        return CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]))
+                .thenApply(v -> futures.entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> entry.getValue().join()
+                        )));
+    }
+/*
 
     /**
      * Invokes a service and returns a CompletableFuture for easier integration with existing async code.
