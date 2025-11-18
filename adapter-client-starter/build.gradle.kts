@@ -1,6 +1,6 @@
 plugins {
     `java-library`
-    // Don't add maven-publish here - it's handled by root
+    // Don't add Spring Boot plugin - this is a library, not an application
 }
 
 // Don't set version here - inherit from root
@@ -18,8 +18,9 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter")
+    implementation("org.springframework.boot:spring-boot-autoconfigure")
 
-    // Use 'api' for transitive exposure
+    // Use 'api' for transitive exposure to consuming projects
     api(project(":adapter-gateway-service"))
     api(project(":adapter-transform-core"))
     api(project(":adapter-commons"))

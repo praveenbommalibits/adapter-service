@@ -106,3 +106,16 @@ tasks.register("publishClientModules") {
         ":adapter-spi:publishMavenPublicationToGitHubPackagesRepository"
     )
 }
+
+// Fat jar creation tasks
+tasks.register("buildGatewayFatJar") {
+    group = "build"
+    description = "Build fat jar for adapter-gateway-service"
+    dependsOn(":adapter-gateway-service:bootJar")
+}
+
+tasks.register("buildClientStarterFatJar") {
+    group = "build"
+    description = "Build fat jar for adapter-client-starter"
+    dependsOn(":adapter-client-starter:bootJar")
+}

@@ -57,6 +57,50 @@ adapter:
           readTimeout: 10000
           totalTimeout: 15000
 
+    # OAuth2 REST API Example 1 - Payment Service
+    payment-api:
+      serviceName: "payment-api"
+      protocol: "REST_JSON"
+      endpointUrl: "https://api.payment.com/v1/transactions"
+      httpMethod: "POST"
+      requestTemplate: "payment-request.json"
+      responseTemplate: "payment-response.json"
+      headers:
+        Accept: "application/json"
+        Content-Type: "application/json"
+      auth:
+        type: "OAUTH2"
+        tokenEndpoint: "https://auth.payment.com/oauth/token"
+        clientId: "payment-client-123"
+        clientSecret: "payment-secret-abc"
+        scope: "payment.write payment.read"
+      resilience:
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 10000
+          totalTimeout: 15000
+
+    # OAuth2 REST API Example 2 - Customer Service
+    customer-api:
+      serviceName: "customer-api"
+      protocol: "REST_JSON"
+      endpointUrl: "https://api.customer.com/v2/customers/{customerId}"
+      httpMethod: "GET"
+      responseTemplate: "customer-response.json"
+      headers:
+        Accept: "application/json"
+      auth:
+        type: "OAUTH2"
+        tokenEndpoint: "https://auth.customer.com/token"
+        clientId: "customer-client-456"
+        clientSecret: "customer-secret-xyz"
+        scope: "customer.read"
+      resilience:
+        timeouts:
+          connectionTimeout: 5000
+          readTimeout: 10000
+          totalTimeout: 15000
+
     user-soap-api:
       serviceName: "user-soap-api"
       protocol: "SOAP"

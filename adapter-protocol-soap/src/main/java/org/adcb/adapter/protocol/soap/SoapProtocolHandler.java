@@ -93,7 +93,7 @@ public class SoapProtocolHandler implements ProtocolHandler {
 
             // 4. Execute SOAP call
             String soapXmlResponse = executeSoapCall(webClient, config, soapXmlRequest, headers);
-            log.debug("Received SOAP response: {}", soapXmlResponse);
+            log.info("Received SOAP response: {}", soapXmlResponse);
 
             // 5. Process and transform response
             return processSoapResponse(config, soapXmlResponse);
@@ -211,10 +211,12 @@ public class SoapProtocolHandler implements ProtocolHandler {
      *
      * <p>Processing steps:
      * 1. Parse XML response into nested Map structure
-     * 2. Flatten/normalize the XML structure for template access
-     * 3. Add system variables for template processing
-     * 4. Apply JSON response template to extract needed fields
-     * 5. Parse final JSON into Java object
+     * 2. Validate returnCode and extract error details from header
+     * 3. Return error response if returnCode != 0
+     * 4. Flatten/normalize the XML structure for template access
+     * 5. Add system variables for template processing
+     * 6. Apply JSON response template to extract needed fields
+     * 7. Parse final JSON into Java object
      *
      * @param config           Service configuration with response template
      * @param soapXmlResponse  Raw SOAP XML response string
@@ -230,28 +232,179 @@ public class SoapProtocolHandler implements ProtocolHandler {
         Map<String, Object> xmlMap = xmlMapper.readValue(soapXmlResponse, Map.class);
         log.debug("Full XML structure: {}", xmlMap);
 
-        // 2. Extract SOAP Body content for easier template access
+        // 2. Validate SOAP response for business errors
+        StandardResponse<Object> errorResponse = validateSoapResponse(xmlMap, config);
+        if (errorResponse != null) {
+            return errorResponse;
+        }
+
+        // 3. No response template: return complete parsed XML structure
+        if (config.getResponseTemplate() == null || config.getResponseTemplate().trim().isEmpty()) {
+            log.debug("No response template configured, returning complete parsed XML");
+            return xmlMap;
+        }
+
+        // 4. Extract SOAP Body content for template processing
         Map<String, Object> templateContext = extractSoapBody(xmlMap);
         log.debug("Extracted template context: {}", templateContext);
 
-        // 3. Add system variables for template processing
+        // 5. Add system variables for template processing
         templateContext.put("currentTimeISO", LocalDateTime.now().toString());
         templateContext.put("systemName", "ADCB_ADAPTER");
         templateContext.put("version", "1.0");
 
         log.debug("SOAP template context keys: {}", templateContext.keySet());
 
-        // 4. Apply JSON response template if configured
-        if (config.getResponseTemplate() != null) {
-            String jsonResponse = templateService.process(config.getResponseTemplate(), templateContext);
-            log.debug("Templated JSON response: {}", jsonResponse);
+        // 6. Apply JSON response template
+        String jsonResponse = templateService.process(config.getResponseTemplate(), templateContext);
+        log.debug("Templated JSON response: {}", jsonResponse);
 
-            // 5. Parse templated JSON into Java object
-            return objectMapper.readValue(jsonResponse, Object.class);
+        // 7. Parse templated JSON into Java object
+        return objectMapper.readValue(jsonResponse, Object.class);
+    }
+
+    /**
+     * Validates SOAP response by checking returnCode in header.
+     * Returns error response if returnCode != 0, otherwise null for success.
+     *
+     * @param xmlMap Parsed SOAP XML response
+     * @param config Service configuration
+     * @return StandardResponse with error details if failed, null if success
+     */
+    @SuppressWarnings("unchecked")
+    private StandardResponse<Object> validateSoapResponse(Map<String, Object> xmlMap, ServiceMetadata config) {
+        try {
+            // Navigate to SOAP Body
+            Map<String, Object> envelope = (Map<String, Object>)
+                    xmlMap.getOrDefault("Envelope", xmlMap.get("SOAP-ENV:Envelope"));
+            if (envelope == null) return null;
+
+            Map<String, Object> body = (Map<String, Object>)
+                    envelope.getOrDefault("Body", envelope.get("SOAP-ENV:Body"));
+            if (body == null) return null;
+
+            // Find header element (could be in any response message)
+            Map<String, Object> header = findHeaderInBody(body);
+            if (header == null) {
+                log.debug("No header found in SOAP response, skipping validation");
+                return null;
+            }
+
+            // Extract returnCode
+            String returnCode = extractValue(header, "returnCode");
+            if (returnCode == null) {
+                log.debug("No returnCode found in header, skipping validation");
+                return null;
+            }
+
+            log.info("SOAP returnCode: {}", returnCode);
+
+            // Success case: returnCode = "0"
+            if ("0".equals(returnCode)) {
+                return null;
+            }
+
+            // Failure case: extract error details
+            String errorDescription = extractValue(header, "errorDescription");
+            String errorDetail = extractValue(header, "errorDetail");
+
+            // Extract error code from errorDetail (format: ModCompanionEnrollment-{errorCode}-{message})
+            String extractedErrorCode = extractErrorCode(errorDetail);
+
+            log.error("SOAP business error - returnCode: {}, errorCode: {}, errorDetail: {}",
+                    returnCode, extractedErrorCode, errorDetail);
+
+            ErrorDetails error = ErrorDetails.builder()
+                    .errorCode("SOAP_BUSINESS_ERROR")
+                    .errorMessage(errorDescription != null ? errorDescription : "Business Error")
+                    .errorDescription(errorDetail != null ? errorDetail : "SOAP service returned error")
+                    .category(ErrorCategory.BUSINESS)
+                    .severity(ErrorSeverity.MEDIUM)
+                    .source("SOAP_DOWNSTREAM")
+                    .originalErrorCode(extractedErrorCode != null ? extractedErrorCode : returnCode)
+                    .retryable(false)
+                    .downstreamService(config.getServiceName())
+                    .additionalContext(Map.of(
+                            "returnCode", returnCode,
+                            "errorCode", extractedErrorCode != null ? extractedErrorCode : "",
+                            "errorDetail", errorDetail != null ? errorDetail : "",
+                            "errorDescription", errorDescription != null ? errorDescription : ""
+                    ))
+                    .build();
+
+            return StandardResponse.<Object>builder()
+                    .success(false)
+                    .status(ResponseStatus.BUSINESS_ERROR)
+                    .error(error)
+                    .serviceName(config.getServiceName())
+                    .protocol("SOAP")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+        } catch (Exception e) {
+            log.warn("Error during SOAP response validation: {}", e.getMessage());
+            return null; // Continue with normal processing
         }
+    }
 
-        // 6. No template: return the extracted SOAP body structure
-        return templateContext;
+    /**
+     * Recursively finds header element in SOAP body.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> findHeaderInBody(Map<String, Object> body) {
+        for (Object value : body.values()) {
+            if (value instanceof Map) {
+                Map<String, Object> map = (Map<String, Object>) value;
+                // Check if this map contains header element
+                for (String key : map.keySet()) {
+                    if (key.contains("header")) {
+                        Object headerObj = map.get(key);
+                        if (headerObj instanceof Map) {
+                            return (Map<String, Object>) headerObj;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extracts value from map, handling namespace prefixes.
+     */
+    private String extractValue(Map<String, Object> map, String fieldName) {
+        // Try direct key
+        Object value = map.get(fieldName);
+        if (value != null) {
+            return value.toString();
+        }
+        // Try with namespace prefix (ns1:fieldName, ns0:fieldName, etc.)
+        for (String key : map.keySet()) {
+            if (key.endsWith(":" + fieldName)) {
+                return map.get(key).toString();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extracts error code from errorDetail string.
+     * Format: ModCompanionEnrollment-{errorCode}-{message}
+     * Example: "ModCompanionEnrollment-666666-SMSOTP System Timeout" -> "666666"
+     */
+    private String extractErrorCode(String errorDetail) {
+        if (errorDetail == null || errorDetail.isEmpty()) {
+            return null;
+        }
+        String[] parts = errorDetail.split("-");
+        if (parts.length >= 2) {
+            String code = parts[1].trim();
+            // Validate it's numeric
+            if (code.matches("\\d+")) {
+                return code;
+            }
+        }
+        return null;
     }
 
     /**

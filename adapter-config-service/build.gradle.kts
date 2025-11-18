@@ -1,15 +1,15 @@
 plugins {
-    `java`
+    `java-library`
 }
 
-group = "org.adcb"
-version = "1.0.0-SNAPSHOT"
+group = "org.adcb.adapter"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }

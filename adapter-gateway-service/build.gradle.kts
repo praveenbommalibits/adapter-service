@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":adapter-spi"))
     implementation(project(":adapter-protocol-rest"))
     implementation(project(":adapter-protocol-soap"))
+    implementation(project(":adapter-protocol-proxy"))
     implementation(project(":adapter-commons"))
     implementation(project(":adapter-transform-core"))
 

@@ -26,6 +26,13 @@ public class CircuitBreakerManager {
      * @throws Exception if circuit is open or operation fails
      */
     public <T> T execute(String serviceName, ServiceMetadata config, Supplier<T> supplier) {
+        // ✅ ADD CONDITIONAL CHECK: Check if circuit breaker is enabled
+        var cbConfig = config.getResilience().getCircuitBreaker();
+        if (cbConfig == null || !cbConfig.isEnabled()) {
+            // Circuit breaker disabled - execute directly
+            return supplier.get();
+        }
+
         CircuitBreaker circuitBreaker = breakers.computeIfAbsent(serviceName, key ->
                 createCircuitBreaker(key, config));
 

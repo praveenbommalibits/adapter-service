@@ -1,33 +1,46 @@
 package org.adcb.adapter.spi.auth;
 
-import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.adcb.adapter.commons.ServiceMetadata;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.Map;
-
+/**
+ * OAuth2 Client Credentials authentication strategy.
+ * Delegates token management to OAuth2TokenManager.
+ */
 @Component("OAUTH2")
+@Slf4j
 public class OAuth2ClientCredsStrategy implements AuthenticationStrategy {
-    private volatile String accessToken;
+
+    private final OAuth2TokenManager tokenManager;
+
+    @Autowired
+    public OAuth2ClientCredsStrategy(OAuth2TokenManager tokenManager) {
+        this.tokenManager = tokenManager;
+    }
+
     @Override
     public void apply(ServiceMetadata config, HttpHeaders headers) {
-        if (accessToken == null || tokenExpired()) refreshToken(config);
-        headers.add("Authorization","Bearer "+accessToken);
+        if (config.getAuth() == null || config.getAuth().getTokenEndpoint() == null) {
+            throw new IllegalArgumentException("OAuth2 requires tokenEndpoint configuration");
+        }
+
+        String token = tokenManager.getToken(
+                config.getAuth().getTokenEndpoint(),
+                config.getAuth().getClientId(),
+                config.getAuth().getClientSecret(),
+                config.getAuth().getScope()
+        );
+
+        headers.add("Authorization", "Bearer " + token);
+        log.debug("Applied OAuth2 Bearer token for service: {}", config.getServiceName());
     }
+
     @Override
     public void refreshToken(ServiceMetadata config) {
-        WebClient client = WebClient.create();
-        TokenResponse tr = client.post()
-                .uri(config.getAuth().getTokenEndpoint())
-                .bodyValue(Map.of("grant_type","client_credentials",
-                        "client_id",config.getAuth().getClientId(),
-                        "client_secret",config.getAuth().getClientSecret()))
-                .retrieve().bodyToMono(TokenResponse.class).block();
-        this.accessToken = tr.getAccessToken();
+        // Token refresh is handled automatically by OAuth2TokenManager
+        log.debug("Token refresh handled by OAuth2TokenManager");
     }
-    private boolean tokenExpired() { return false; } // implement expiry
-    @Data
-    static class TokenResponse { private String accessToken; private long expiresIn; }
 }
