@@ -43,6 +43,7 @@ subprojects {
             "adapter-gateway-service",
             "adapter-protocol-rest",
             "adapter-protocol-soap",
+            "adapter-protocol-proxy",
             "adapter-spi"
         )) {
         apply(plugin = "maven-publish")

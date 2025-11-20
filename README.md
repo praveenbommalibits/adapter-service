@@ -1,230 +1,218 @@
-# Microservices Adapter Platform
+# ADCB Adapter Platform
+
+A flexible, protocol-agnostic integration platform for connecting to external services with support for REST, SOAP, and HTTP Proxy protocols.
+
+## Features
+
+- 🔌 **Multi-Protocol Support**: REST/JSON, SOAP/XML, HTTP Proxy
+- 🔐 **Multiple Authentication**: API Key, Basic, Bearer, OAuth2
+- 🔄 **Request/Response Transformation**: FreeMarker templates
+- 🛡️ **Resilience Patterns**: Circuit breaker, retry, timeouts
+- 📦 **Spring Boot Auto-Configuration**: Zero-config integration
+- 🎯 **Type-Safe Configuration**: Strongly-typed service metadata
 
 ---
 
-## What is this Project?
+## Quick Start
 
-The Microservices Adapter Platform is a modular Java backend integration framework for building robust, scalable microservice architectures.  
-It provides a central adapter layer and starter library for communication with REST, SOAP, and proxy services—enabling standardized error handling, flexible protocol orchestration, centralized configuration, and rapid extension with new protocols.
+### For Application Developers
 
----
+**1. Add dependency:**
+```gradle
+repositories {
+    mavenLocal()
+}
 
-## Why Was It Introduced?
+dependencies {
+    implementation 'org.adcb.adapter:adapter-client-starter:5.0.0-SNAPSHOT'
+}
+```
 
-- **Standardization:** Microservices at scale suffer from divergent error handling, security implementations, and protocol differences. This adapter enforces a single contract and response shape for all communications.
-- **Plug-and-play Extensibility:** Teams need to add, swap, or upgrade downstream integration protocols (REST, SOAP, gRPC, proxy, etc.) without refactoring their core business logic.
-- **Centralized Cross-cutting Management:** Logging, authentication, error cataloging, and transformations are managed centrally.
-- **Rapid Onboarding:** New or existing microservices can simply add a single dependency and start integrating with diverse backend APIs using the same `invoke` method.
-- **Proxy/Pass-through Support:** Easily build microservices acting as direct HTTP proxies without transformation/normalization logic.
+**2. Configure service:**
+```properties
+adapter.services.my-api.serviceName=my-api
+adapter.services.my-api.protocol=REST_JSON
+adapter.services.my-api.endpointUrl=http://api.example.com/users
+adapter.services.my-api.httpMethod=GET
+```
 
-![Adapter Service Architecture](./adapter-architecture.png)
----
+**3. Use in code:**
+```java
+@Service
+public class MyService {
+    private final AdapterGatewayClient adapter;
+    
+    public Mono<StandardResponse> getUser(String id) {
+        return adapter.invokeService("my-api", Map.of("userId", id));
+    }
+}
+```
 
-## How Does It Work?
-
-- Microservices include the **adapter-client-starter** dependency.
-- All downstream calls use the unified `AdapterGatewayClient` API.
-- Service endpoints/protocols (REST/JSON, SOAP, PROXY_PASS, etc.) are configured in YAML.
-- The adapter-gateway orchestrates requests, dispatches to the right handler, manages error/logging/security, and normalizes responses.
-- Each protocol handler implements a SPI for adding new protocols as needed.
+📖 **See [QUICK_START.md](QUICK_START.md) for 5-minute setup**  
+📚 **See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for complete documentation**
 
 ---
 
 ## Project Structure
 
+```
+adapter-service/
+├── adapter-client-starter/      # 👈 Use this in your applications
+├── adapter-gateway-service/     # Core orchestration engine
+├── adapter-commons/             # Shared models and DTOs
+├── adapter-spi/                 # Protocol handler interface
+├── adapter-protocol-rest/       # REST/JSON handler
+├── adapter-protocol-soap/       # SOAP/XML handler
+├── adapter-protocol-proxy/      # HTTP Proxy handler
+└── adapter-transform-core/      # Template transformation engine
+```
 
 ---
 
-## Modules
+## Module Overview
 
-| Module                    | Description                                                          |
-|---------------------------|----------------------------------------------------------------------|
-| adapter-client-starter    | Spring Boot starter for consumer microservices (main entry API)      |
-| adapter-gateway-service   | Central orchestration and protocol router                            |
-| adapter-protocol-rest     | Handles REST/JSON endpoint calls                                     |
-| adapter-protocol-soap     | Handles SOAP XML endpoint calls                                      |
-| adapter-protocol-proxy    | Direct HTTP proxy/pass-through calls                                 |
-| adapter-commons           | Shared DTOs, POJOs, utility classes                                 |
-| adapter-spi               | SPI for protocol handler registration                                |
-| adapter-transform-core    | Mapping and transformation (pending)                                 |
-| adapter-config-service    | Centralized service configuration (optional/pending)                 |
-| adapter-security          | Security/auth logic (optional/pending)                               |
+### adapter-client-starter
+**Purpose:** Spring Boot starter for consuming applications  
+**Use When:** Integrating adapter into your application  
+**Provides:** Auto-configuration, client wrapper, all dependencies
 
----
+### adapter-gateway-service
+**Purpose:** Core orchestration and service invocation  
+**Use When:** Internal library (included via client-starter)  
+**Provides:** Protocol routing, resilience, error handling
 
----
+### adapter-commons
+**Purpose:** Shared models and utilities  
+**Provides:** StandardResponse, ServiceMetadata, error codes
 
-### Individual Module Details
+### adapter-spi
+**Purpose:** Protocol handler interface  
+**Provides:** ProtocolHandler, AuthStrategy contracts
 
-#### 1. adapter-client-starter
-- **Purpose:** Provides the main API for microservices (`AdapterGatewayClient`). Auto-configures all dependencies and adapters via Spring Boot.
-- **How it works:** Microservices just inject and invoke `AdapterGatewayClient`.
+### adapter-protocol-rest
+**Purpose:** REST/JSON protocol implementation  
+**Supports:** GET, POST, PUT, DELETE, PATCH
 
-#### 2. adapter-gateway-service
-- **Purpose:** Central orchestrator. Reads config (`ServiceMetadata`), dispatches to correct protocol handler, handles errors/logs/security.
-- **How it works:** Bootstrapped as either part of starter or as a standalone Spring Boot microservice.
+### adapter-protocol-soap
+**Purpose:** SOAP/XML protocol implementation  
+**Supports:** SOAP 1.1/1.2, WSDL-based services
 
-#### 3. adapter-protocol-rest
-- **Purpose:** Handles REST/JSON service calls using Spring WebClient.
-- **How it works:** Accepts configs, request bodies, and returns normalized response objects.
+### adapter-protocol-proxy
+**Purpose:** HTTP proxy forwarding  
+**Supports:** Transparent request forwarding
 
-#### 4. adapter-protocol-soap
-- **Purpose:** Handles SOAP service calls using Spring Web Services.
-- **How it works:** Manages XML request/response, fault handling, and templates.
-
-#### 5. adapter-protocol-proxy
-- **Purpose:** Direct HTTP proxy/pass-through. Forwards requests and bodies as-is.
-- **How it works:** No transformation or normalization performed. Returns raw downstream responses.
-
-#### 6. adapter-commons
-- **Purpose:** DTOs, error objects, utility classes, core response models shared across modules.
-
-#### 7. adapter-spi
-- **Purpose:** Service Provider Interface for protocol handlers.
-- **How it works:** Easily add new protocol modules by implementing `ProtocolHandler` SPI and registering as Spring bean.
-
-#### 8. adapter-transform-core *(pending)*
-- **Purpose:** Centralized transformation & mapping for request/response data, templates, and conversions.
-
-#### 9. adapter-config-service *(optional, pending)*
-- **Purpose:** Externalizes adapter config; supports dynamic endpoint and protocol updates.
-
-#### 10. adapter-security *(optional, pending)*
-- **Purpose:** Handles authentication, authorization, and security filtering at adapter layer.
+### adapter-transform-core
+**Purpose:** Request/response transformation  
+**Provides:** FreeMarker template engine
 
 ---
 
-## How Microservices Consume the Adapter (as Dependency)
+## Supported Protocols
 
-1. **Add Dependency:**
-    - In your microservice’s `build.gradle.kts`:
-        ```
-        dependencies {
-            implementation("org.adcb.adapter:adapter-client-starter:1.0.0")
-        }
-        ```
-2. **Configure Services:**
-    - In `application.yml`:
-        ```
-        adapter:
-          services:
-            rest_service:
-              protocol: REST_JSON
-              endpointUrl: https://api.example.com/resource
-              httpMethod: POST
-              headers:
-                Authorization: Bearer xyz
-            soap_service:
-              protocol: SOAP
-              endpointUrl: https://soap.example.com/service
-              httpMethod: POST
-            proxy_service:
-              protocol: PROXY_PASS
-              endpointUrl: http://other-service/api/direct
-              httpMethod: GET
-        ```
-
-3. **Use in Code:**
-    ```
-    @Autowired
-    AdapterGatewayClient adapterGatewayClient;
-
-    // REST
-    StandardResponse<?> restResult = adapterGatewayClient.invoke("rest_service", Map.of("id", "123"));
-
-    // SOAP
-    StandardResponse<?> soapResult = adapterGatewayClient.invoke("soap_service", "<soapRequest>...</soapRequest>");
-
-    // Proxy/pass-through
-    String proxyResp = (String) adapterGatewayClient.invoke("proxy_service", payloadObject);
-    ```
+| Protocol | Description | Use Case |
+|----------|-------------|----------|
+| REST_JSON | RESTful JSON APIs | Modern REST services |
+| SOAP | SOAP/XML Web Services | Legacy enterprise systems |
+| PROXY | HTTP Proxy | Direct forwarding |
 
 ---
 
-## How to Spin Up Adapter Gateway as an Independent Service
+## Supported Authentication
 
-- The **adapter-gateway-service** can run as a standalone Spring Boot application (for enterprise cases, API aggregation, security, etc.)
-    1. Build the module:
-        ```
-        ./gradlew :adapter-gateway-service:bootJar
-        ```
-    2. Run as a Spring Boot app:
-        ```
-        java -jar adapter-gateway-service/build/libs/adapter-gateway-service-1.0.0.jar
-        ```
-    3. Point all microservices’ adapter config to the gateway endpoint.
+| Type | Description | Configuration |
+|------|-------------|---------------|
+| NONE | No authentication | `auth.type=NONE` |
+| API_KEY | API Key (Header/Query) | `auth.type=API_KEY` |
+| BASIC | Basic Authentication | `auth.type=BASIC` |
+| BEARER | Bearer Token | `auth.type=BEARER` |
+| OAUTH2 | OAuth2 Client Credentials | `auth.type=OAUTH2` |
 
 ---
 
-## Testing
+## Building the Project
 
-- **Unit Tests:** Each protocol handler and utility class is covered by JUnit 5 + Mockito tests.
-- **Integration Tests:** Gateway service supports Spring Boot and WebClient/WebServiceTemplate tests with WireMock, MockWebServiceServer.
-- **End-to-End:** Run client-starter in a sample microservice with mock endpoints (REST, SOAP, Proxy) to validate flow and error normalization.
+### Prerequisites
+- Java 21
+- Gradle 8.5+
 
-**Test Command**:
+### Build All Modules
+```bash
+./gradlew clean build
+```
 
+### Publish to Maven Local
+```bash
+./gradlew publishToMavenLocal
+```
 
-## Features
-
-- Unified API for all backend protocols
-- Central error/logging/security handling
-- Protocol-agnostic microservice integration
-- Fully configurable and extensible (just implement new ProtocolHandler)
-- Support for REST, SOAP, Proxy/Pass-through endpoints
-- Response normalization (customizable)
-
----
-
-## Installation
-
-1. Clone or fork the repository.
-2. Build multi-module project using Gradle:
-    ```
-    ./gradlew clean build
-    ```
-3. Add `adapter-client-starter` as dependency to your microservice.
+### Run Tests
+```bash
+./gradlew test
+```
 
 ---
 
-## Configuration
+## Configuration Example
 
-Define services/protocols in your microservice `application.yml`:
+```properties
+# Template Configuration
+adapter.templates.path=classpath:/adapter-templates/
+adapter.templates.cache.enabled=true
 
+# REST API Service
+adapter.services.user-api.serviceName=user-api
+adapter.services.user-api.protocol=REST_JSON
+adapter.services.user-api.endpointUrl=http://localhost:8090/api/users/{userId}
+adapter.services.user-api.httpMethod=GET
+adapter.services.user-api.requestTemplate=user-request.json
+adapter.services.user-api.responseTemplate=user-response.json
+adapter.services.user-api.auth.type=API_KEY
+adapter.services.user-api.auth.strategy=HEADER
+adapter.services.user-api.auth.keyName=X-API-Key
+adapter.services.user-api.auth.tokenSource=your-api-key
 
----
-
-## Implementation Status
-
-### ✅ Completed
-- `adapter-client-starter`
-- `adapter-gateway-service`
-- `adapter-commons`
-- `adapter-spi`
-- `adapter-protocol-rest`
-- `adapter-protocol-soap`
-- `adapter-protocol-proxy`
-
-### ⏳ Pending / Optional
-- `adapter-transform-core` (response/object mapping)
-- `adapter-config-service` (externalized/dynamic config)
-- `adapter-security` (adapter-layer security and authn/z)
-- Expanded protocol support (gRPC, JMS, etc.)
-
----
-
-## Developer Workflow
-
-1. **Add/Customize Endpoint:**  
-   Configure in your microservice’s adapter section.
-2. **Consume:**  
-   Use the auto-wired client gateway API.
-3. **Extend:**  
-   Add new protocol modules via the SPI.
-4. **Test:**  
-   Run unit/integration/E2E tests before deployment!
-5. **Monitor/Error:**  
-   Central logs and errors enable easier troubleshooting.
+# Resilience Configuration
+adapter.services.user-api.resilience.timeouts.connectionTimeout=5000
+adapter.services.user-api.resilience.timeouts.readTimeout=10000
+adapter.services.user-api.resilience.circuitBreaker.enabled=true
+adapter.services.user-api.resilience.retry.enabled=true
+adapter.services.user-api.resilience.retry.maxAttempts=3
+```
 
 ---
 
+## Documentation
+
+- [Quick Start Guide](QUICK_START.md) - 5-minute integration
+- [Integration Guide](INTEGRATION_GUIDE.md) - Complete documentation
+- [Architecture Overview](docs/ARCHITECTURE.md) - System design (if exists)
+
+---
+
+## Requirements
+
+- **Java:** 21+
+- **Spring Boot:** 3.5.5+
+- **Gradle:** 8.5+ or Maven 3.8+
+
+---
+
+## Version
+
+**Current Version:** 5.0.0-SNAPSHOT  
+**Java Version:** 21  
+**Spring Boot Version:** 3.5.5
+
+---
+
+## License
+
+Apache License 2.0
+
+---
+
+## Support
+
+For questions or issues, contact the ADCB Adapter Team.
+
+**Last Updated:** November 2025
